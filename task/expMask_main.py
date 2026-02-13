@@ -5,7 +5,7 @@ from expMask_helpers import *
 # Participant + Block info
 # =====================================================
 while True:
-    myDlg = gui.Dlg(title="EXPATConn fMRI Experiment")
+    myDlg = gui.Dlg(title="EXPMask Experiment")
     myDlg.addText('Subject Information')
     myDlg.addField("Subject ID:")
     myDlg.addField("Block ID:")
@@ -78,7 +78,7 @@ cue_data_practice = create_cue_dynam(highProb=0.8, lowProb=0.2, neutral=1.0, tri
 # =====================================================
 # IMAGE DATA
 # =====================================================
-stim_path = "C:\\boyanova\\Mask_ExpAtt\\stimuli"
+stim_path = ".\\stimuli"
 random_seed = participant_num + run_num 
 image_data, stimuli = create_block_trials(stim_path, cue_data, random_seed=random_seed)
 image_data_practice, stimuli_practice = create_block_trials(stim_path, cue_data_practice, random_seed=2026)
@@ -88,7 +88,7 @@ n_trial_practice = len(image_data_practice)
 # =====================================================
 # MASK SETUP
 # =====================================================
-masks_path = "C:\\boyanova\\Mask_ExpAtt\\masks"
+masks_path = ".\\masks"
 all_masks = os.listdir(masks_path)
 
 # =====================================================
@@ -101,6 +101,7 @@ pos_right = ( ecc, 0)
 image_size = 400
 target_img_size = 150
 eight_image_layout = False
+
 # =====================================================
 # STIMULI
 # =====================================================
@@ -122,15 +123,15 @@ fixation_cross= visual.ShapeStim(
 target_stim = visual.ImageStim(win,size=(image_size, image_size), units='pix')
 distractor_stim = visual.ImageStim(win,size=(image_size, image_size), units='pix')
 
+## ==== Mask Stim ==== ##
 mask_left = visual.ImageStim(win, size=(image_size, image_size), units='pix', pos=pos_left)
 mask_right = visual.ImageStim(win, size=(image_size, image_size), units='pix', pos=pos_right)
 
-question_left = visual.TextStim(win, text='?', height=100, units="pix", 
-                                pos=pos_left, color=[-1, -1, -1])
-
-question_right = visual.TextStim(win, text='?', height=100, units="pix", 
-                                pos=pos_right, color=[-1, -1, -1])
-
+## ==== Create Arrows for selection ==== ##
+arrow_left = visual.ImageStim(win, image=".\\arrows\\left.png", size=(target_img_size, target_img_size), units='pix')
+arrow_right = visual.ImageStim(win, image=".\\arrows\\right.png", size=(target_img_size, target_img_size), units='pix')
+arrow_up = visual.ImageStim(win, image=".\\arrows\\up.png", size=(target_img_size, target_img_size), units='pix')
+arrow_down = visual.ImageStim(win, image=".\\arrows\\down.png", size=(target_img_size, target_img_size), units='pix')
 
 # =====================================================
 # DURATIONS
@@ -180,12 +181,13 @@ if practice_:
     stimuli_practice,
     cue_stim,
     fixation_cross,
-    question_left,
-    question_right,
+    arrow_left,
+    arrow_right,
+    arrow_up,
+    arrow_down,
     mask_pool,
     pos_left,
     pos_right,
-    eight_image_layout,
     target_img_size,
     cue_duration,
     image_duration,
@@ -205,12 +207,13 @@ else:
         stimuli,
         cue_stim,
         fixation_cross,
-        question_left,
-        question_right,
+        arrow_left,
+        arrow_right,
+        arrow_up,
+        arrow_down,
         mask_pool,
         pos_left,
         pos_right,
-        eight_image_layout,
         target_img_size,
         cue_duration,
         image_duration,

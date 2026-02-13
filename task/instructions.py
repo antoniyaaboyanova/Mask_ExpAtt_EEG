@@ -7,7 +7,7 @@ In this task, you will see a series of very brief images
 presented on the left and right side of the screen 👀
 
 Each trial begins with a word cue shown at the center
-of the screen 
+of the screen. 
 
 The cue indicates the type of image that is MORE LIKELY
 to appear on that trial — but it is NOT always correct 🤔
@@ -18,7 +18,7 @@ The cues you will see are:
 ▶  Water vessel
 ▶  Neutral
 
-After the cue, two images will appear very briefly:
+After the cue, two images will appear simultaneously very briefly:
 one on the left and one on the right 
 They will be immediately followed by visual masks ⏱
 
@@ -35,13 +35,15 @@ On each trial, you will complete two responses.
 
 1. LOCATION response:
 Where did an image appear?
-Press LEFT if the target appeared on the left.
-Press RIGHT if the target appeared on the right.
+← →
+Press LEFT if you saw an image on the left side.
+Press RIGHT if you saw an image on the right side.
 
 2. IDENTITY response:
 Which exact image appear? 
-Use LEFT and RIGHT to move the selection frame.
-Press UP to confirm your choice.
+← → ↑ ↓
+You will be shown 4 images which will be shown in a cirlce.
+Press an arrow key (LEFT, RIGHT, UP, DOWN) to select the image zou saw.
 
 Please respond based on your first impression.
 
@@ -53,7 +55,7 @@ Press SPACE to continue ⌨
 """
 
 BREAK_TEXT = """
-Please take a short break (2–3 minutes).
+Please take a short break (1–2 minutes).
 
 Press SPACE to continue ⌨
 """

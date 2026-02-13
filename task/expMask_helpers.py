@@ -38,6 +38,52 @@ def create_cue_dynam(highProb=0.7, lowProb=0.3, neutral=1.0, trials_per_cue=40):
     
     return cue_data
     
+def build_constrained_order(df, seed=None, max_unexpected_run=1):
+    rng = np.random.default_rng(seed)
+
+    remaining = df.copy()
+    ordered_rows = []
+
+    last_target = None
+    unexpected_run = 0
+
+    while len(remaining) > 0:
+
+        # valid candidates mask
+        valid_mask = np.ones(len(remaining), dtype=bool)
+
+        # Rule 1 — no same target twice
+        if last_target is not None:
+            valid_mask &= (remaining["target"].values != last_target)
+
+        # Rule 2 — max unexpected run
+        if unexpected_run >= max_unexpected_run:
+            valid_mask &= (remaining["expectation"].values != "unexpected")
+
+        valid = remaining[valid_mask]
+
+        # if dead end → restart whole sequence
+        if len(valid) == 0:
+            return build_constrained_order(df, seed=rng.integers(0,1e9))
+
+        # pick random valid row
+        choice_idx = rng.integers(len(valid))
+        row = valid.iloc[choice_idx]
+
+        ordered_rows.append(row)
+
+        # update state
+        last_target = row["target"]
+        if row["expectation"] == "unexpected":
+            unexpected_run += 1
+        else:
+            unexpected_run = 0
+
+        # remove selected row
+        remaining = remaining.drop(valid.index[choice_idx])
+
+    return pd.DataFrame(ordered_rows).reset_index(drop=True)
+
 def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1): 
     categories = os.listdir(stim_path)
     stimuli = []
@@ -140,9 +186,9 @@ def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1):
     data["target_loc"] = [np.random.choice(["L", "R"], 1, p=[0.5, 0.5])[0] for _ in range(len(data["target"]))]
     data["distractor_loc"] = ["R" if x == "L" else "L" for x in data["target_loc"]]
     df = pd.DataFrame(data)
-    df = df.sample(frac=1, random_state=random_seed).reset_index(drop=True)
+    df = build_constrained_order(df, seed=random_seed)
     return df, stimuli
-    
+
 
 def make_text_stim(win, text):
     return visual.TextBox2(
@@ -177,14 +223,15 @@ def run_block(win,
     # stimuli & layout
     cue_stim,
     fixation_cross,
-    question_left,
-    question_right,
+    arrow_left,
+    arrow_right,
+    arrow_up,
+    arrow_down,
     mask_pool,
 
     # geometry
     pos_left,
     pos_right,
-    eight_image_layout,
     target_img_size, 
 
     # timing
@@ -222,10 +269,8 @@ def run_block(win,
         size=(1.0, 0.6),   # adjust if needed
         pos=(0, -0.05)
     )
-    if eight_image_layout:
-        selection_options = 8
-    else:
-        selection_options = 4
+
+    selection_options = 4
     
     print(f"Preparing params for identity selection:{1/selection_options} ..")
     only_target_indexes = image_data["target_id"].unique()
@@ -246,34 +291,16 @@ def run_block(win,
             image_data.at[i, "only_targets_names"] = img_path
 
     n_targets = len(only_targets)
-    if eight_image_layout:
-        # circular layout 
-        radius = 300  # pixels
-        angles = np.linspace(0, 2 * np.pi, n_targets, endpoint=False)
-        positions = [
-            (radius * np.cos(a), radius * np.sin(a))
-            for a in angles]
-    else:
-        # horizontal layout
-        spacing = 250  # pixels between image centers
 
-        # Center the row on the screen
-        start_x = -spacing * (selection_options - 1) / 2
+    # circular layout 
+    radius = 300
+    arrow_radius = 150
 
-        positions = [
-            (start_x + i * spacing, 0)
-            for i in range(n_targets)
-        ]
+    angles = np.linspace(0, 2*np.pi, 4, endpoint=False)
 
-    border = visual.Rect(
-        win,
-        width=target_img_size + 20,
-        height=target_img_size + 20,
-        lineColor="black",
-        lineWidth=4,
-        fillColor=None,
-        units="pix"
-    )
+    positions = [(radius*np.cos(a), radius*np.sin(a)) for a in angles]
+    arrow_positions = [(arrow_radius*np.cos(a), arrow_radius*np.sin(a)) for a in angles]
+
     # Create a empty list to store all trial data 
     trial_log = []
     n_trials=(len(image_data))
@@ -424,8 +451,10 @@ def run_block(win,
         while response_loc is None and response_clock.getTime() < loc_response:
 
             fixation_cross.draw()
-            question_left.draw()
-            question_right.draw()
+            arrow_left.pos = pos_left
+            arrow_right.pos = pos_right
+            arrow_left.draw()
+            arrow_right.draw()
             win.flip()
 
             keys = event.getKeys(
@@ -451,64 +480,68 @@ def run_block(win,
         #print("Selected side:", str(response_loc), str(response_loc == image_data["target_loc"][i]))
         win.flip()
         core.wait(0.5)
+        
         ## ==== IDENTITY RESPONSE WINDOW ==== ##
-        if eight_image_layout:
-            stims = image_data["only_targets"].iloc[only_target_indexes]
-        else:
-            target_selection = np.where(image_data["only_targets_names"] == image_data["target"][i])[0][0]
+        target_selection = np.where(image_data["only_targets_names"] == image_data["target"][i])[0][0]
 
-            distractors_selection = only_target_indexes[only_target_indexes != target_selection]
-            wrong_choices = np.random.choice(image_data["only_targets"].iloc[distractors_selection], size=3, replace=False)
-            stims = np.append(wrong_choices, image_data["only_targets"].iloc[target_selection])
-            np.random.shuffle(stims)
+        distractors_selection = only_target_indexes[only_target_indexes != target_selection]
+        wrong_choices = np.random.choice(image_data["only_targets"].iloc[distractors_selection], size=3, replace=False)
+        stims = np.append(wrong_choices, image_data["only_targets"].iloc[target_selection])
+        np.random.shuffle(stims)
         
         start_idx = np.random.randint(selection_options)
         event.clearEvents(eventType='keyboard')
+        arrow_right.pos = arrow_positions[0]
+        arrow_up.pos = arrow_positions[1]
+        arrow_left.pos = arrow_positions[2]
+        arrow_down.pos = arrow_positions[3]
         
         # Initial draw
         for stim, pos in zip(stims, positions):
             stim.pos = pos
             stim.draw()
-
-        border.pos = positions[start_idx]
-        border.draw()
+            arrow_left.draw()
+            arrow_right.draw()
+            arrow_up.draw()
+            arrow_down.draw()
 
         t_resp_onset = win.flip()
         response_clock = core.Clock()
 
         response_id = None
         rt_id = None
+        key_to_index = {"right": 0, "up": 1, "left": 2,"down": 3}
         
         while response_id is None and response_clock.getTime() < id_response:
             
-            keys = event.getKeys(keyList=["left", "right", "up", "escape"],  
+            keys = event.getKeys(keyList=["left", "right", "up", "down", "escape"],  
             timeStamped=response_clock)
-        
+            
             for key, t in keys:
-                if key == "left":
-                    start_idx = (start_idx - 1) % selection_options
-                elif key == "right":
-                    start_idx = (start_idx + 1) % selection_options
-                elif key == "up":
-                    rt_id = t
-                    response_id = stims[start_idx].image
-                    break
-                elif key == "escape":
+
+                if key == "escape":
                     win.close()
                     core.quit()
-            
-            # 🔥 end trial if response
-            if response_id != None:
-                win.flip()  # clears screen immediately
+
+                if key in key_to_index:
+                    idx = key_to_index[key]
+                    rt_id = t
+                    response_id = stims[idx].image
+                    break
+
+            if response_id is not None:
+                win.flip()  # clear screen immediately
                 break
-            
-            # Redraw every frame if no response
+
+            # --- DRAW FRAME ---
             for stim, pos in zip(stims, positions):
                 stim.pos = pos
                 stim.draw()
 
-            border.pos = positions[start_idx]
-            border.draw()
+            arrow_left.draw()
+            arrow_right.draw()
+            arrow_up.draw()
+            arrow_down.draw()
 
             win.flip()
 
