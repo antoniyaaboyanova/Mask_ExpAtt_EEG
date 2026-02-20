@@ -6,8 +6,8 @@ INTRO_TEXT = """
 In this task, you will see a series of very brief images
 presented on the left and right side of the screen 👀
 
-Each trial begins with a word cue shown at the center
-of the screen. 
+Each trial begins with a word cue 
+shown at the center of the screen. 
 
 The cue indicates the type of image that is MORE LIKELY
 to appear on that trial — but it is NOT always correct 🤔
@@ -19,7 +19,7 @@ The cues you will see are:
 ▶  Neutral
 
 After the cue, two images will appear simultaneously very briefly:
-one on the left and one on the right 
+one on the LEFT and one on the RIGHT                 
 They will be immediately followed by visual masks ⏱
 
 ⚠ IMPORTANT ⚠
@@ -32,24 +32,32 @@ Press SPACE to continue ⌨
 
 TASK_TEXT = """
 On each trial, you will complete two responses.
+---------------------------------------------------
+=== 1. LOCATION response ===
+WHERE did an image appear?
 
-1. LOCATION response:
-Where did an image appear?
+Once the left and right images disappear, the fixation cross will turn into:
+<< >>
+At this point you need to:
 ← →
 Press LEFT if you saw an image on the left side.
 Press RIGHT if you saw an image on the right side.
 
-2. IDENTITY response:
-Which exact image appear? 
-← → ↑ ↓
-You will be shown 4 images which will be shown in a cirlce.
-Press an arrow key (LEFT, RIGHT, UP, DOWN) to select the image zou saw.
+---------------------------------------------------
+=== 2. IDENTITY response === 
+WHAT exact image appeared? 
 
-Please respond based on your first impression.
+Once you responded left or right, you will be shown 4 images which 
+will be shown in a cardinal way.
+At this point you need to:
+← → ↑ ↓
+Press an arrow key (LEFT, RIGHT, UP, DOWN) to select the image you saw.
+ 
+---------------------------------------------------
 
 ⚠ IMPORTANT ⚠
-Sometimes it will be really hard but still try to 
-give your best guess!🎯
+Please respond fast and based on your first impression!
+Sometimes it will be really hard but try to guess!🎯
 
 Press SPACE to continue ⌨
 """

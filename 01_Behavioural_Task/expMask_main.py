@@ -78,7 +78,7 @@ cue_data_practice = create_cue_dynam(highProb=0.8, lowProb=0.2, neutral=1.0, tri
 # =====================================================
 # IMAGE DATA
 # =====================================================
-stim_path = ".\\stimuli"
+stim_path = "C:\\Users\\bozanova\\Desktop\\things_mask\\stimuli"
 random_seed = participant_num + run_num 
 image_data, stimuli = create_block_trials(stim_path, cue_data, random_seed=random_seed)
 image_data_practice, stimuli_practice = create_block_trials(stim_path, cue_data_practice, random_seed=2026)
@@ -88,7 +88,7 @@ n_trial_practice = len(image_data_practice)
 # =====================================================
 # MASK SETUP
 # =====================================================
-masks_path = ".\\masks"
+masks_path = "C:\\Users\\bozanova\\Desktop\\things_mask\\masks"
 all_masks = os.listdir(masks_path)
 
 # =====================================================
@@ -101,7 +101,6 @@ pos_right = ( ecc, 0)
 image_size = 400
 target_img_size = 150
 eight_image_layout = False
-
 # =====================================================
 # STIMULI
 # =====================================================
@@ -118,16 +117,25 @@ fixation_cross= visual.ShapeStim(
         lineWidth=1.0,
         colorSpace='rgb', lineColor='white', fillColor='white',
         opacity=None, depth=0.0, interpolate=True)
+        
+fixation_arrows = visual.TextStim(
+    win=win,
+    text='<<  >>',
+    font='Arial',
+    units='pix',      # ← ADD THIS
+    pos=(0, 0),
+    height=40,        # now 40 pixels
+    color='white'
+)
+
 
 ## ==== Create Target/Distractor Stim ==== ##
 target_stim = visual.ImageStim(win,size=(image_size, image_size), units='pix')
 distractor_stim = visual.ImageStim(win,size=(image_size, image_size), units='pix')
 
-## ==== Mask Stim ==== ##
 mask_left = visual.ImageStim(win, size=(image_size, image_size), units='pix', pos=pos_left)
 mask_right = visual.ImageStim(win, size=(image_size, image_size), units='pix', pos=pos_right)
 
-## ==== Create Arrows for selection ==== ##
 arrow_left = visual.ImageStim(win, image=".\\arrows\\left.png", size=(target_img_size, target_img_size), units='pix')
 arrow_right = visual.ImageStim(win, image=".\\arrows\\right.png", size=(target_img_size, target_img_size), units='pix')
 arrow_up = visual.ImageStim(win, image=".\\arrows\\up.png", size=(target_img_size, target_img_size), units='pix')
@@ -181,6 +189,7 @@ if practice_:
     stimuli_practice,
     cue_stim,
     fixation_cross,
+    fixation_arrows,
     arrow_left,
     arrow_right,
     arrow_up,
@@ -207,6 +216,7 @@ else:
         stimuli,
         cue_stim,
         fixation_cross,
+        fixation_arrows,
         arrow_left,
         arrow_right,
         arrow_up,

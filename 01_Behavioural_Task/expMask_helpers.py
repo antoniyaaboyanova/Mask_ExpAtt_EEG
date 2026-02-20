@@ -194,13 +194,13 @@ def make_text_stim(win, text):
     return visual.TextBox2(
         win,
         text=text,
-        letterHeight=0.03,    # 👈 instead of height
+        letterHeight=0.03,     # instead of height
         pos=(0, 0),            # center of screen
         anchor='center',       # anchor box at its center
         alignment='center',    # center text inside the box
         size=(1.1, 0.8),
         color=[-1, -1, -1],
-        font='Segoe UI Emoji'          # 👈 generally emoji-safe (OS dependent)
+        font='Segoe UI Emoji'  # generally emoji-safe (OS dependent)
     )
     
 def draw_and_wait(win, draw_func):
@@ -223,6 +223,7 @@ def run_block(win,
     # stimuli & layout
     cue_stim,
     fixation_cross,
+    fixation_arrows,
     arrow_left,
     arrow_right,
     arrow_up,
@@ -253,7 +254,6 @@ def run_block(win,
     ## ==== Create all Texts ==== ##
     intro_text = make_text_stim(win, INTRO_TEXT)
     task_text = make_text_stim(win, TASK_TEXT)
-    break_text = make_text_stim(win, BREAK_TEXT)
     start_text = make_text_stim(win, START_TEXT)
     stimuli_title = visual.TextStim(
     win,
@@ -336,19 +336,24 @@ def run_block(win,
         
         # ==== Block break every 100 trials ====
         if (i + 1) % 100 == 0 and i != n_trials - 1:
-
             event.clearEvents(eventType="keyboard")
+            loc_acc = np.mean([t["correct_loc"] is True for t in trial_log]) * 100
+            id_acc = np.mean([t["correct_id"] is True for t in trial_log]) * 100
 
-            while True:
-                break_text.draw()
-                win.flip()
+    
+            break_text = visual.TextStim(
+            win,
+            text=(
+                f"Please take a short break (1–2 minutes).\n\n"
+                f"Location accuracy: {loc_acc:.1f}%\n"
+                f"Identity accuracy: {id_acc:.1f}%\n\n"
+                "Press SPACE to continue ⌨"
+            ),
+            height=0.05,
+            color=[-1, -1, -1],
+            wrapWidth=1.2)
 
-                keys = event.getKeys(keyList=["space", "escape"])
-                if "space" in keys:
-                    break
-                if "escape" in keys:
-                    win.close()
-                    core.quit()
+            draw_and_wait(win, lambda: break_text.draw()) 
 
             # Optional polish: re-center before next trial
             fixation_cross.draw()
@@ -440,22 +445,21 @@ def run_block(win,
             mask_i += 1
         
         actual_mask_duration = np.mean(mask_durations)
+        fixation_cross.draw()
+        short_isi_st = win.flip()
+        core.wait(0.05)
+    
         
         ## ==== LOCATION RESPONSE WINDOW ==== ##
         event.clearEvents(eventType='keyboard')
+        fixation_arrows.draw() 
         t_resp_onset = win.flip()
         response_clock = core.Clock()
         response_loc = None
         rt_loc = None
 
-        while response_loc is None and response_clock.getTime() < loc_response:
 
-            fixation_cross.draw()
-            arrow_left.pos = pos_left
-            arrow_right.pos = pos_right
-            arrow_left.draw()
-            arrow_right.draw()
-            win.flip()
+        while response_loc is None and response_clock.getTime() < loc_response:
 
             keys = event.getKeys(
                 keyList=['left', 'right', 'escape'],
@@ -479,7 +483,7 @@ def run_block(win,
 
         #print("Selected side:", str(response_loc), str(response_loc == image_data["target_loc"][i]))
         win.flip()
-        core.wait(0.5)
+        core.wait(0.35)
         
         ## ==== IDENTITY RESPONSE WINDOW ==== ##
         target_selection = np.where(image_data["only_targets_names"] == image_data["target"][i])[0][0]
