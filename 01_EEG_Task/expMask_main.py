@@ -144,8 +144,8 @@ arrow_down = visual.ImageStim(win, image=".\\arrows\\down.png", size=(target_img
 # =====================================================
 # DURATIONS
 # =====================================================
-cue_duration = 0.8
-fix_duration = 0.8
+cue_duration = 0.25
+fix_duration = 0.5
 image_duration = 0.017
 loc_response = 1.5
 id_response = 4
@@ -199,6 +199,7 @@ if practice_:
     pos_right,
     target_img_size,
     cue_duration,
+    fix_duration,
     image_duration,
     loc_response,
     id_response,
@@ -226,6 +227,7 @@ else:
         pos_right,
         target_img_size,
         cue_duration,
+        fix_duration,
         image_duration,
         loc_response,
         id_response,

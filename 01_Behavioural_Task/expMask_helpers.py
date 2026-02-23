@@ -237,6 +237,7 @@ def run_block(win,
 
     # timing
     cue_duration,
+    fix_duration,
     image_duration,
     loc_response,
     id_response,
@@ -361,7 +362,7 @@ def run_block(win,
             core.wait(0.5)
         
         ## ==== ITI (jittered) ==== ##
-        iti_duration = np.random.uniform(1.0, 2.0)
+        iti_duration = np.random.uniform(0.5, 1.0)
         fixation_cross.draw()
         win.flip()
         core.wait(iti_duration)
@@ -372,6 +373,9 @@ def run_block(win,
         cue_stim.draw()
         win.flip()
         core.wait(cue_duration)
+        fixation_cross.draw()
+        win.flip()
+        core.wait(fix_duration)
         
         ## ==== Pick trial images ==== ##
         target_id = image_data["target_id"][i]
@@ -447,7 +451,7 @@ def run_block(win,
         actual_mask_duration = np.mean(mask_durations)
         fixation_cross.draw()
         short_isi_st = win.flip()
-        core.wait(0.05)
+        core.wait(0.05) ## For eeg this may need to become larger
     
         
         ## ==== LOCATION RESPONSE WINDOW ==== ##
