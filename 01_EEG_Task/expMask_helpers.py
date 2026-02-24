@@ -12,6 +12,10 @@ from instructions import (
 
 
 def create_cue_dynam(highProb=0.7, lowProb=0.3, neutral=1.0, trials_per_cue=40):
+    
+    # double the amount for EEG 
+    trial_per_neutral = 2 * trials_per_cue
+    
     cue_data = {"cue_names": ["Sea animal",  "Water vessel",  "Neutral"],
                 "cue_letters": ["SA", "WV", "X"],
                 "cue_color": [[0.4, 0.6, 1.0], [-0.4, -0.2, 0.4], [-1, -1, -1]],
@@ -33,8 +37,14 @@ def create_cue_dynam(highProb=0.7, lowProb=0.3, neutral=1.0, trials_per_cue=40):
             cue_data["cue_highProb"].append([np.round(neutral / len(cue_data["cue_highProb_cats"][cue_id]), 3)] * len(cue_data["cue_highProb_cats"][cue_id]))
             cue_data["cue_lowProb"].append([np.round(neutral / len(cue_data["cue_lowProb_cats"][cue_id]), 3)] * len(cue_data["cue_highProb_cats"][cue_id]))
             
-    cue_data["high_prob_trials"] = [np.array(x) * trials_per_cue for x in cue_data["cue_highProb"]] 
-    cue_data["low_prob_trials"] =  [np.array(x) * trials_per_cue for x in cue_data["cue_lowProb"]]
+    cue_data["high_prob_trials"] = [
+    np.array(x) * (trial_per_neutral if cue_data["cue_names"][idx] == "Neutral" else trials_per_cue)
+    for idx, x in enumerate(cue_data["cue_highProb"])
+]
+    cue_data["low_prob_trials"] =  [
+    np.array(x) * (trial_per_neutral if cue_data["cue_names"][idx] == "Neutral" else trials_per_cue)
+    for idx, x in enumerate(cue_data["cue_lowProb"])
+]
     
     return cue_data
     
@@ -84,7 +94,7 @@ def build_constrained_order(df, seed=None, max_unexpected_run=1):
 
     return pd.DataFrame(ordered_rows).reset_index(drop=True)
 
-def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1): 
+def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1, pick_images="_01"): 
     categories = os.listdir(stim_path)
     stimuli = []
     for cat in categories:
@@ -92,7 +102,11 @@ def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1):
         files = os.listdir(cat_path)
         stimuli.extend([f".\\stimuli\\{cat}\\{x}" for x in files])
 
-    stimuli = np.array(stimuli)[np.argsort(stimuli)]
+    # Filter stims
+    stimuli = np.array(stimuli)
+    stimuli = np.array([x for x in stimuli if pick_images in x ])
+    stimuli = stimuli[np.argsort(stimuli)]
+    
     data = {"target_id": [],
             "distractor_id": [],
             "target": [],
@@ -103,7 +117,8 @@ def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1):
             "cue_color": [],
             "cue_letter": [],
             "target_name": [],
-            "target_cat": [],}
+            "target_cat": [],
+            "target_loc": []}
 
     mask_type = [0.017, long_isi]
     distractors = stimuli[np.char.count(stimuli, "mask") > 0]
@@ -124,29 +139,31 @@ def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1):
                 trial_collectos = []
                 for mask in mask_type:
                 
-                    h_trials = cue_data["low_prob_trials"][cue_id][i]
-                    split_h_trials = int(h_trials // 2)
-                    data["target_id"].extend(np.repeat(target_ids , split_h_trials))
-                    data["target"].extend(np.repeat(targets, split_h_trials))
+                    h_trials = int(cue_data["low_prob_trials"][cue_id][i])
+                
+                    data["target_id"].extend(np.repeat(target_ids , h_trials))
+                    data["target"].extend(np.repeat(targets, h_trials))
+                    data["target_loc"].extend(["L"] * int(h_trials // 2))
+                    data["target_loc"].extend(["R"] * int(h_trials // 2)) 
                     
                     target_names =[x.split("\\")[-1] for x in targets]
                     target_categories = [x.split("_")[0] for x in target_names]
                     
-                    random_distractors = np.random.choice(local_distractor_ids, split_h_trials * 2)
+                    random_distractors = np.random.choice(local_distractor_ids, h_trials)
                     data["distractor_id"].extend([distractor_ids[x] for x in random_distractors])
                     data["distractor"].extend([distractors[x] for x in random_distractors])
-                    data["target_name"].extend(np.repeat(target_names , split_h_trials))
-                    data["target_cat"].extend(np.repeat(target_categories , split_h_trials))
+                    data["target_name"].extend(np.repeat(target_names , h_trials))
+                    data["target_cat"].extend(np.repeat(target_categories , h_trials))
                     
                     if cue != "Neutral":
-                        data["expectation"].extend(["unexpected"] * split_h_trials * 2)
+                        data["expectation"].extend(["unexpected"] * h_trials)
                     else:
-                        data["expectation"].extend(["neutral"]* split_h_trials * 2)
+                        data["expectation"].extend(["neutral"]* h_trials)
                         
-                    data["mask_ISI"].extend([mask] * split_h_trials * 2)
-                    data["cue"].extend([cue] * split_h_trials * 2)
-                    data["cue_color"].extend([cue_data["cue_color"][cue_id]]* split_h_trials * 2)
-                    data["cue_letter"].extend([cue_data["cue_letters"][cue_id]]* split_h_trials * 2)
+                    data["mask_ISI"].extend([mask] * h_trials)
+                    data["cue"].extend([cue] * h_trials)
+                    data["cue_color"].extend([cue_data["cue_color"][cue_id]]* h_trials)
+                    data["cue_letter"].extend([cue_data["cue_letters"][cue_id]]* h_trials)
                     
         for i, h_cat in enumerate(high_cats):
             h_cat_stim = stimuli[np.char.count(stimuli, h_cat) > 0]
@@ -155,40 +172,42 @@ def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1):
 
             trial_collectos = []
             for mask in mask_type:
-                h_trials = cue_data["high_prob_trials"][cue_id][i]
-                split_h_trials = int(h_trials // 2)
+                h_trials = int(cue_data["high_prob_trials"][cue_id][i])
                 
-                data["target_id"].extend(np.repeat(target_ids , split_h_trials))
-                data["target"].extend(np.repeat(targets , split_h_trials))
+                data["target_id"].extend(np.repeat(target_ids , h_trials))
+                data["target"].extend(np.repeat(targets , h_trials))
+                data["target_loc"].extend(["L"] * int(h_trials // 2)) 
+                data["target_loc"].extend(["R"] * int(h_trials // 2)) 
                 
                 target_names =[x.split("\\")[-1] for x in targets]
                 target_categories = [x.split("_")[0] for x in target_names]
                 
-                random_distractors = np.random.choice(local_distractor_ids, split_h_trials * 2)
+                random_distractors = np.random.choice(local_distractor_ids, h_trials)
                 data["distractor_id"].extend([distractor_ids[x] for x in random_distractors])
                 data["distractor"].extend([distractors[x] for x in random_distractors])
-                data["target_name"].extend(np.repeat(target_names , split_h_trials))
-                data["target_cat"].extend(np.repeat(target_categories , split_h_trials))
+                data["target_name"].extend(np.repeat(target_names , h_trials))
+                data["target_cat"].extend(np.repeat(target_categories , h_trials))
                 
                 
                 if cue != "Neutral":
-                    data["expectation"].extend(["expected"] * split_h_trials * 2)
+                    data["expectation"].extend(["expected"] * h_trials)
                 else:
-                    data["expectation"].extend(["neutral"]* split_h_trials * 2)
+                    data["expectation"].extend(["neutral"]* h_trials)
                     
-                data["mask_ISI"].extend([mask] * split_h_trials * 2)
-                data["cue"].extend([cue] * split_h_trials * 2)
-                data["cue_color"].extend([cue_data["cue_color"][cue_id]]* split_h_trials * 2)
-                data["cue_letter"].extend([cue_data["cue_letters"][cue_id]] * split_h_trials * 2)
+                data["mask_ISI"].extend([mask] * h_trials)
+                data["cue"].extend([cue] * h_trials)
+                data["cue_color"].extend([cue_data["cue_color"][cue_id]]* h_trials)
+                data["cue_letter"].extend([cue_data["cue_letters"][cue_id]] * h_trials)
                 
 
                 
-    data["target_loc"] = [np.random.choice(["L", "R"], 1, p=[0.5, 0.5])[0] for _ in range(len(data["target"]))]
+    #data["target_loc"] = [np.random.choice(["L", "R"], 1, p=[0.5, 0.5])[0] for _ in range(len(data["target"]))]
     data["distractor_loc"] = ["R" if x == "L" else "L" for x in data["target_loc"]]
     df = pd.DataFrame(data)
     df = build_constrained_order(df, seed=random_seed)
+    
     return df, stimuli
-
+        
 
 def make_text_stim(win, text):
     return visual.TextBox2(
