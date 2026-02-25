@@ -39,15 +39,50 @@ def create_cue_dynam(highProb=0.7, lowProb=0.3, neutral=1.0, trials_per_cue=40):
             
     cue_data["high_prob_trials"] = [
     np.array(x) * (trial_per_neutral if cue_data["cue_names"][idx] == "Neutral" else trials_per_cue)
-    for idx, x in enumerate(cue_data["cue_highProb"])
-]
+    for idx, x in enumerate(cue_data["cue_highProb"])]
+    
     cue_data["low_prob_trials"] =  [
     np.array(x) * (trial_per_neutral if cue_data["cue_names"][idx] == "Neutral" else trials_per_cue)
-    for idx, x in enumerate(cue_data["cue_lowProb"])
-]
+    for idx, x in enumerate(cue_data["cue_lowProb"])]
     
     return cue_data
     
+def assign_trigger(row, late=0.100):
+    
+    # ---- MASK ----
+    if row['mask_ISI'] == 0.017:
+        mask_code = 10
+    elif row['mask_ISI'] == late:
+        mask_code = 20
+    else:
+        raise ValueError("Unknown mask type")
+    
+    # ---- IMAGE (side dependent) ----
+    image_id = row['image_index']
+    
+    # Left images should be 1–4
+    # Right images should be 5–8
+    if row['target_loc'] == 'L':
+        image_code = image_id
+    elif row['target_loc'] == 'R':
+        image_code = image_id + 4
+    else:
+        raise ValueError("Unknown location")
+    
+    base_code = mask_code + image_code
+    
+    # ---- EXPECTATION ----
+    if row['expectation'] == 'neutral':
+        exp_code = 0
+    elif row['expectation'] == 'expected':
+        exp_code = 100
+    elif row['expectation'] == 'unexpected':
+        exp_code = 200
+    else:
+        raise ValueError("Unknown expectation")
+    
+    return base_code + exp_code    
+
 def build_constrained_order(df, seed=None, max_unexpected_run=1):
     rng = np.random.default_rng(seed)
 
@@ -203,11 +238,19 @@ def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1, pick_ima
                 
     #data["target_loc"] = [np.random.choice(["L", "R"], 1, p=[0.5, 0.5])[0] for _ in range(len(data["target"]))]
     data["distractor_loc"] = ["R" if x == "L" else "L" for x in data["target_loc"]]
+    mapping = {0: 1,
+           3: 2,
+           5: 3,
+           7: 4}
+
+
     df = pd.DataFrame(data)
+    df['image_index'] = df['target_id'].map(mapping)
+    df['trigger'] = df.apply(assign_trigger, axis=1)
     df = build_constrained_order(df, seed=random_seed)
     
+    
     return df, stimuli
-        
 
 def make_text_stim(win, text):
     return visual.TextBox2(
