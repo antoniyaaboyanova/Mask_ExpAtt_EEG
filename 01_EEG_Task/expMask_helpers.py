@@ -260,12 +260,13 @@ def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1, pick_ima
            7: 4}
 
 
+    for key in data.keys():
+        print(f"{key} : {len(data[key])}")
     df = pd.DataFrame(data)
     df['image_index'] = df['target_id'].map(mapping)
     df['trigger'] = df.apply(assign_trigger, axis=1)
     df["identity_catch"] = create_changes(len(df), identity_catch)
     df = build_constrained_order(df, seed=random_seed)
-    
     
     return df, stimuli
 
@@ -400,6 +401,7 @@ def run_block(win,
         lambda: task_text.draw())
     
     if practice:
+        print(f"There will be {n_trials} trials in the practice")
         practice_text = make_text_stim(win, PRACTICE_TEXT)
         draw_and_wait(win, lambda: practice_text.draw())
         feedback_text = visual.TextStim(win, text="", height=0.03,
@@ -414,8 +416,9 @@ def run_block(win,
     
     for i in range(n_trials):
         
-        # ==== Block break every 100 trials ====
-        if (i + 1) % 100 == 0 and i != n_trials - 1:
+        # ==== Block break every 120 trials ====
+        if (i + 1) % 120 == 0 and i != n_trials - 1:
+            print("Participant is having a break...")
             event.clearEvents(eventType="keyboard")
             loc_acc = np.mean([t["correct_loc"] is True for t in trial_log]) * 100
             id_acc = np.mean([t["correct_id"] is True for t in trial_log]) * 100
@@ -441,7 +444,7 @@ def run_block(win,
             core.wait(0.5)
         
         ## ==== ITI (jittered) ==== ##
-        iti_duration = np.random.uniform(0.5, 1.0)
+        iti_duration = np.random.uniform(0.5, 0.6)
         fixation_cross.draw()
         win.flip()
         core.wait(iti_duration)
@@ -530,7 +533,12 @@ def run_block(win,
         actual_mask_duration = np.mean(mask_durations)
         fixation_cross.draw()
         short_isi_st = win.flip()
-        core.wait(0.05) ## For eeg this may need to become larger
+        
+        # adding a short pause between response and masks
+        iti_duration = np.random.uniform(0.5, 1.0)
+        fixation_cross.draw()
+        win.flip()
+        core.wait(iti_duration)
     
         
         ## ==== LOCATION RESPONSE WINDOW ==== ##
@@ -569,96 +577,98 @@ def run_block(win,
         core.wait(0.35)
         
         ## ==== IDENTITY RESPONSE WINDOW ==== ##
-        target_selection = np.where(image_data["only_targets_names"] == image_data["target"][i])[0][0]
+        if image_data["identity_catch"][i]:
+            target_selection = np.where(image_data["only_targets_names"] == image_data["target"][i])[0][0]
 
-        distractors_selection = only_target_indexes[only_target_indexes != target_selection]
-        wrong_choices = np.random.choice(image_data["only_targets"].iloc[distractors_selection], size=3, replace=False)
-        stims = np.append(wrong_choices, image_data["only_targets"].iloc[target_selection])
-        np.random.shuffle(stims)
-        
-        start_idx = np.random.randint(selection_options)
-        event.clearEvents(eventType='keyboard')
-        arrow_right.pos = arrow_positions[0]
-        arrow_up.pos = arrow_positions[1]
-        arrow_left.pos = arrow_positions[2]
-        arrow_down.pos = arrow_positions[3]
-        
-        # Initial draw
-        for stim, pos in zip(stims, positions):
-            stim.pos = pos
-            stim.draw()
-            arrow_left.draw()
-            arrow_right.draw()
-            arrow_up.draw()
-            arrow_down.draw()
-
-        t_resp_onset = win.flip()
-        response_clock = core.Clock()
-
-        response_id = None
-        rt_id = None
-        key_to_index = {"right": 0, "up": 1, "left": 2,"down": 3}
-        
-        while response_id is None and response_clock.getTime() < id_response:
+            distractors_selection = only_target_indexes[only_target_indexes != target_selection]
+            wrong_choices = np.random.choice(image_data["only_targets"].iloc[distractors_selection], size=3, replace=False)
+            stims = np.append(wrong_choices, image_data["only_targets"].iloc[target_selection])
+            np.random.shuffle(stims)
             
-            keys = event.getKeys(keyList=["left", "right", "up", "down", "escape"],  
-            timeStamped=response_clock)
+            start_idx = np.random.randint(selection_options)
+            event.clearEvents(eventType='keyboard')
+            arrow_right.pos = arrow_positions[0]
+            arrow_up.pos = arrow_positions[1]
+            arrow_left.pos = arrow_positions[2]
+            arrow_down.pos = arrow_positions[3]
             
-            for key, t in keys:
-
-                if key == "escape":
-                    win.close()
-                    core.quit()
-
-                if key in key_to_index:
-                    idx = key_to_index[key]
-                    rt_id = t
-                    response_id = stims[idx].image
-                    break
-
-            if response_id is not None:
-                win.flip()  # clear screen immediately
-                break
-
-            # --- DRAW FRAME ---
+            # Initial draw
             for stim, pos in zip(stims, positions):
                 stim.pos = pos
                 stim.draw()
+                arrow_left.draw()
+                arrow_right.draw()
+                arrow_up.draw()
+                arrow_down.draw()
 
-            arrow_left.draw()
-            arrow_right.draw()
-            arrow_up.draw()
-            arrow_down.draw()
+            t_resp_onset = win.flip()
+            response_clock = core.Clock()
 
-            win.flip()
+            response_id = None
+            rt_id = None
+            key_to_index = {"right": 0, "up": 1, "left": 2,"down": 3}
+            
+            while response_id is None and response_clock.getTime() < id_response:
+                
+                keys = event.getKeys(keyList=["left", "right", "up", "down", "escape"],  
+                timeStamped=response_clock)
+                
+                for key, t in keys:
+
+                    if key == "escape":
+                        win.close()
+                        core.quit()
+
+                    if key in key_to_index:
+                        idx = key_to_index[key]
+                        rt_id = t
+                        response_id = stims[idx].image
+                        break
+
+                if response_id is not None:
+                    win.flip()  # clear screen immediately
+                    break
+
+                # --- DRAW FRAME ---
+                for stim, pos in zip(stims, positions):
+                    stim.pos = pos
+                    stim.draw()
+
+                arrow_left.draw()
+                arrow_right.draw()
+                arrow_up.draw()
+                arrow_down.draw()
+
+                win.flip()
+            
+        else:
+            response_id = None
+            rt_id = None
 
             
         #print("Selected image:", str(response_id), str(response_id == image_data["target"][i]))
         if practice:
             
-            # Create texts for responses
+            # Create texts for responses & code responses
             feedback_loc = visual.TextStim(win, pos=(0, 0.1), height=0.06)
-            feedback_id  = visual.TextStim(win, pos=(0, -0.1), height=0.06)
-            
-            # Code responses 
+            if image_data["identity_catch"][i]:
+                feedback_id  = visual.TextStim(win, pos=(0, -0.1), height=0.06)
+                correct_id = response_id == image_data["target"][i] if response_id else False
+                feedback_id.text  = f"Identity: {'Correct' if correct_id else 'Incorrect'}"
+                feedback_id.color  = "green" if correct_id else "red"
+                
             correct_loc = response_loc == image_data["target_loc"][i] if response_loc else False
-            correct_id = response_id == image_data["target"][i] if response_id else False
-            
-            # Set text
             feedback_loc.text = f"Location: {'Correct' if correct_loc else 'Incorrect'}"
-            feedback_id.text  = f"Identity: {'Correct' if correct_id else 'Incorrect'}"
-
-            # Set colors
             feedback_loc.color = "green" if correct_loc else "red"
-            feedback_id.color  = "green" if correct_id else "red"
-
+            
             # Show for n seconds
             timer = core.Clock()
             timer.reset()
 
             while timer.getTime() < 2:
                 feedback_loc.draw()
-                feedback_id.draw()
+                if image_data["identity_catch"][i]:
+                    feedback_id.draw()
                 win.flip()
                 
 
@@ -686,6 +696,7 @@ def run_block(win,
         "response_loc": str(response_loc),
         "rt_loc": rt_loc if rt_loc else np.nan,
         "correct_loc": response_loc == image_data["target_loc"][i] if response_loc else 'None',
+        "identity_catch": image_data["identity_catch"][i],
         "response_id": str(response_id),
         "rt_id": rt_id if rt_id else np.nan,
         "correct_id": response_id == image_data["target"][i] if response_id else 'None'})
@@ -696,7 +707,7 @@ def run_block(win,
             save_data(trial_log, output_dir, output_filename)
         
     loc_acc = np.mean([t["correct_loc"] is True for t in trial_log]) * 100
-    id_acc = np.mean([t["correct_id"] is True for t in trial_log]) * 100
+    id_acc = np.mean([t["correct_id"] for t in trial_log if t["identity_catch"]]) * 100
 
     if practice:
         summary_text = visual.TextStim(

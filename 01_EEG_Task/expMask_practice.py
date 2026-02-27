@@ -82,7 +82,7 @@ cue_data_practice = create_cue_dynam(highProb=0.8, lowProb=0.2, neutral=1.0, tri
 # IMAGE DATA
 # =====================================================
 random_seed = participant_num + run_num 
-image_data_practice, stimuli_practice = create_block_trials(stim_path, cue_data_practice, random_seed=2026)
+image_data_practice, stimuli_practice = create_block_trials(stim_path, cue_data_practice, random_seed=2026, identity_catch=0.3)
 n_trial_practice = len(image_data_practice)
 
 # =====================================================
