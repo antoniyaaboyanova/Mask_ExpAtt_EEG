@@ -1,4 +1,5 @@
 import numpy as np
+import random
 import os
 import pandas as pd 
 from psychopy import visual, core, event, gui
@@ -81,7 +82,22 @@ def assign_trigger(row, late=0.100):
     else:
         raise ValueError("Unknown expectation")
     
-    return base_code + exp_code    
+    return base_code + exp_code
+
+def create_changes(list_length, prec):
+    # Number of instances to set as True (2%)
+    num_true = int(list_length * prec)
+
+    # Create lists of False values
+    catch = [False] * list_length
+
+    # Randomly select indices for fixing and imaging channels
+    catch_indices = random.sample(range(list_length), num_true)
+
+    for idx in catch_indices:
+        catch[idx] = True
+    
+    return np.array(catch)
 
 def build_constrained_order(df, seed=None, max_unexpected_run=1):
     rng = np.random.default_rng(seed)
@@ -129,7 +145,7 @@ def build_constrained_order(df, seed=None, max_unexpected_run=1):
 
     return pd.DataFrame(ordered_rows).reset_index(drop=True)
 
-def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1, pick_images="_01"): 
+def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1, pick_images="_01", identity_catch=0.1): 
     categories = os.listdir(stim_path)
     stimuli = []
     for cat in categories:
@@ -247,6 +263,7 @@ def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1, pick_ima
     df = pd.DataFrame(data)
     df['image_index'] = df['target_id'].map(mapping)
     df['trigger'] = df.apply(assign_trigger, axis=1)
+    df["identity_catch"] = create_changes(len(df), identity_catch)
     df = build_constrained_order(df, seed=random_seed)
     
     
@@ -618,13 +635,32 @@ def run_block(win,
             
         #print("Selected image:", str(response_id), str(response_id == image_data["target"][i]))
         if practice:
+            
+            # Create texts for responses
+            feedback_loc = visual.TextStim(win, pos=(0, 0.1), height=0.06)
+            feedback_id  = visual.TextStim(win, pos=(0, -0.1), height=0.06)
+            
+            # Code responses 
             correct_loc = response_loc == image_data["target_loc"][i] if response_loc else False
             correct_id = response_id == image_data["target"][i] if response_id else False
-            feedback_text.text = (
-            f"Location: {'Correct' if correct_loc else 'Incorrect'}\n\n"
-            f"Identity: {'Correct' if correct_id else 'Incorrect'}\n\n"
-            "Press SPACE to continue")
-            draw_and_wait(win, lambda: feedback_text.draw())
+            
+            # Set text
+            feedback_loc.text = f"Location: {'Correct' if correct_loc else 'Incorrect'}"
+            feedback_id.text  = f"Identity: {'Correct' if correct_id else 'Incorrect'}"
+
+            # Set colors
+            feedback_loc.color = "green" if correct_loc else "red"
+            feedback_id.color  = "green" if correct_id else "red"
+
+            # Show for n seconds
+            timer = core.Clock()
+            timer.reset()
+
+            while timer.getTime() < 2:
+                feedback_loc.draw()
+                feedback_id.draw()
+                win.flip()
+                
 
     
         #core.wait(1)

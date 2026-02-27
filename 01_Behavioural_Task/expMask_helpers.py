@@ -1,6 +1,7 @@
 import numpy as np
 import os
-import pandas as pd 
+import pandas as pd
+import random 
 from psychopy import visual, core, event, gui
 from instructions import (
     INTRO_TEXT,
@@ -84,7 +85,22 @@ def build_constrained_order(df, seed=None, max_unexpected_run=1):
 
     return pd.DataFrame(ordered_rows).reset_index(drop=True)
 
-def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1): 
+def create_changes(list_length, prec):
+    # Number of instances to set as True (2%)
+    num_true = int(list_length * prec)
+
+    # Create lists of False values
+    catch = [False] * list_length
+
+    # Randomly select indices for fixing and imaging channels
+    catch_indices = random.sample(range(list_length), num_true)
+
+    for idx in catch_indices:
+        catch[idx] = True
+    
+    return np.array(catch)
+
+def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1, identity_catch=1.0): 
     categories = os.listdir(stim_path)
     stimuli = []
     for cat in categories:
@@ -103,7 +119,7 @@ def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1):
             "cue_color": [],
             "cue_letter": [],
             "target_name": [],
-            "target_cat": [],}
+            "target_cat": []}
 
     mask_type = [0.017, long_isi]
     distractors = stimuli[np.char.count(stimuli, "mask") > 0]
@@ -181,13 +197,47 @@ def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1):
                 data["cue_color"].extend([cue_data["cue_color"][cue_id]]* split_h_trials * 2)
                 data["cue_letter"].extend([cue_data["cue_letters"][cue_id]] * split_h_trials * 2)
                 
+            
+    # initialize column first
+    data = pd.DataFrame(data)
+    data["target_loc"] = None  
 
+    for target in np.unique(data["target"]):
+        for expectation_cond in np.unique(data["expectation"]):
                 
-    data["target_loc"] = [np.random.choice(["L", "R"], 1, p=[0.5, 0.5])[0] for _ in range(len(data["target"]))]
+            # build full mask directly (much cleaner)
+            cond_mask = (
+                (data["target"] == target) &
+                (data["expectation"] == expectation_cond))
+            
+            idx = np.where(cond_mask)[0]
+            n_trials = len(idx)
+
+            if n_trials == 0:
+                continue
+            
+            if n_trials % 2 != 0:
+                print(f"Warning: odd number of trials ({n_trials}) in condition")
+            
+            # Create equal L/R
+            half = n_trials // 2
+            labels = np.array(["L"] * half + ["R"] * half)
+
+            # If odd, randomly assign last one
+            if n_trials % 2 != 0:
+                labels = np.append(labels, np.random.choice(["L", "R"]))
+            
+            np.random.shuffle(labels)
+            
+            # Assign back to correct rows
+            data.loc[idx, "target_loc"] = labels
+            
+    #data["target_loc"] = [np.random.choice(["L", "R"], 1, p=[0.5, 0.5])[0] for _ in range(len(data["target"]))]
     data["distractor_loc"] = ["R" if x == "L" else "L" for x in data["target_loc"]]
-    df = pd.DataFrame(data)
-    df = build_constrained_order(df, seed=random_seed)
-    return df, stimuli
+    data["identity_catch"] = create_changes(len(data), identity_catch)
+    data = build_constrained_order(data, seed=random_seed)
+    
+    return data, stimuli
 
 
 def make_text_stim(win, text):
@@ -556,16 +606,32 @@ def run_block(win,
             
         #print("Selected image:", str(response_id), str(response_id == image_data["target"][i]))
         if practice:
+            
+            # Create texts for responses
+            feedback_loc = visual.TextStim(win, pos=(0, 0.1), height=0.06)
+            feedback_id  = visual.TextStim(win, pos=(0, -0.1), height=0.06)
+            
+            # Code responses 
             correct_loc = response_loc == image_data["target_loc"][i] if response_loc else False
             correct_id = response_id == image_data["target"][i] if response_id else False
-            feedback_text.text = (
-            f"Location: {'Correct' if correct_loc else 'Incorrect'}\n\n"
-            f"Identity: {'Correct' if correct_id else 'Incorrect'}\n\n"
-            "Press SPACE to continue")
-            draw_and_wait(win, lambda: feedback_text.draw())
+            
+            # Set text
+            feedback_loc.text = f"Location: {'Correct' if correct_loc else 'Incorrect'}"
+            feedback_id.text  = f"Identity: {'Correct' if correct_id else 'Incorrect'}"
 
-    
-        #core.wait(1)
+            # Set colors
+            feedback_loc.color = "green" if correct_loc else "red"
+            feedback_id.color  = "green" if correct_id else "red"
+
+            # Show for n seconds
+            timer = core.Clock()
+            timer.reset()
+
+            while timer.getTime() < 2:
+                feedback_loc.draw()
+                feedback_id.draw()
+                win.flip()
+                
         
         ## ==== Logging ==== ##
         trial_log.append({

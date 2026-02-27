@@ -76,15 +76,14 @@ win.recordFrameIntervals = True  # timing diagnostics
 # =====================================================
 # CUE DATA
 # =====================================================
-cue_data = create_cue_dynam()
+cue_data_practice = create_cue_dynam(highProb=0.8, lowProb=0.2, neutral=1.0, trials_per_cue=5)
 
 # =====================================================
 # IMAGE DATA
 # =====================================================
 random_seed = participant_num + run_num 
-image_data, stimuli = create_block_trials(stim_path, cue_data, random_seed=random_seed)
-n_trials = len(image_data)
-
+image_data_practice, stimuli_practice = create_block_trials(stim_path, cue_data_practice, random_seed=2026)
+n_trial_practice = len(image_data_practice)
 
 # =====================================================
 # MASK SETUP
@@ -101,7 +100,6 @@ pos_right = ( ecc, 0)
 image_size = 400
 target_img_size = 150
 eight_image_layout = False
-
 # =====================================================
 # STIMULI
 # =====================================================
@@ -123,7 +121,7 @@ fixation_arrows = visual.TextStim(
     win=win,
     text='<<  >>',
     font='Arial',
-    units='pix',      # ← ADD THIS
+    units='pix',    
     pos=(0, 0),
     height=40,        # now 40 pixels
     color='white'
@@ -168,43 +166,44 @@ n_masks_per_trial = 12
 # PRE-LOAD Image POOL
 # =====================================================
 print("Loading stims into memory...")
-image_data["stim"] = None 
-for i, img_path in enumerate(stimuli):
+image_data_practice["stim"] = None 
+for i, img_path in enumerate(stimuli_practice):
     stim = visual.ImageStim(
         win,
         image=img_path,
         size=(image_size, image_size),
         units="pix"
     )
-
-    image_data.at[i, "stim"] = stim
+    
+    image_data_practice.at[i, "stim"] = stim
 
 # =====================================================
-# RUN REAL BLOCK
+# RUN Practice BLOCK
 # =====================================================
 run_block(
-        win,
-        image_data,
-        stimuli,
-        cue_stim,
-        fixation_cross,
-        fixation_arrows,
-        arrow_left,
-        arrow_right,
-        arrow_up,
-        arrow_down,
-        mask_pool,
-        pos_left,
-        pos_right,
-        target_img_size,
-        cue_duration,
-        fix_duration,
-        image_duration,
-        loc_response,
-        id_response,
-        n_masks_per_trial,
-        participant_num,
-        run_num,
-        output_dir,
-        output_filename,
-        practice=False)
+win,
+image_data_practice,
+stimuli_practice,
+cue_stim,
+fixation_cross,
+fixation_arrows,
+arrow_left,
+arrow_right,
+arrow_up,
+arrow_down,
+mask_pool,
+pos_left,
+pos_right,
+target_img_size,
+cue_duration,
+fix_duration,
+image_duration,
+loc_response,
+id_response,
+n_masks_per_trial,
+participant_num,
+run_num,
+output_dir,
+output_filename,
+practice=True)
+    

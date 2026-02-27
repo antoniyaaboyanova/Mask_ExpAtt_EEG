@@ -2,6 +2,12 @@ from psychopy import visual, core, event, gui
 from expMask_helpers import * 
 
 # =====================================================
+# Paths
+# =====================================================
+stim_path = r".\stimuli"
+masks_path = r".\masks"
+
+# =====================================================
 # Participant + Block info
 # =====================================================
 while True:
@@ -9,7 +15,6 @@ while True:
     myDlg.addText('Subject Information')
     myDlg.addField("Subject ID:")
     myDlg.addField("Block ID:")
-    myDlg.addField("Practice?", choices=["No", "Yes"])  # default = No
     ok_data = myDlg.show()
 
     if not myDlg.OK:
@@ -18,7 +23,6 @@ while True:
 
     participant_num_str = ok_data[0]
     run_num_str = ok_data[1]
-    practice_ = ok_data[2] == "Yes"   # False by default
 
     try:
         participant_num = int(participant_num_str)
@@ -73,22 +77,18 @@ win.recordFrameIntervals = True  # timing diagnostics
 # CUE DATA
 # =====================================================
 cue_data = create_cue_dynam()
-cue_data_practice = create_cue_dynam(highProb=0.8, lowProb=0.2, neutral=1.0, trials_per_cue=5)
 
 # =====================================================
 # IMAGE DATA
 # =====================================================
-stim_path = "C:\\Users\\bozanova\\Desktop\\things_mask\\stimuli"
 random_seed = participant_num + run_num 
 image_data, stimuli = create_block_trials(stim_path, cue_data, random_seed=random_seed)
-image_data_practice, stimuli_practice = create_block_trials(stim_path, cue_data_practice, random_seed=2026)
 n_trials = len(image_data)
-n_trial_practice = len(image_data_practice)
+
 
 # =====================================================
 # MASK SETUP
 # =====================================================
-masks_path = "C:\\Users\\bozanova\\Desktop\\things_mask\\masks"
 all_masks = os.listdir(masks_path)
 
 # =====================================================
@@ -101,6 +101,7 @@ pos_right = ( ecc, 0)
 image_size = 400
 target_img_size = 150
 eight_image_layout = False
+
 # =====================================================
 # STIMULI
 # =====================================================
@@ -144,7 +145,7 @@ arrow_down = visual.ImageStim(win, image=".\\arrows\\down.png", size=(target_img
 # =====================================================
 # DURATIONS
 # =====================================================
-cue_duration = 0.25
+cue_duration = 0.5
 fix_duration = 0.5
 image_duration = 0.017
 loc_response = 1.5
@@ -167,8 +168,7 @@ n_masks_per_trial = 12
 # PRE-LOAD Image POOL
 # =====================================================
 print("Loading stims into memory...")
-image_data["stim"] = None  # pre-create column
-image_data_practice["stim"] = None 
+image_data["stim"] = None 
 for i, img_path in enumerate(stimuli):
     stim = visual.ImageStim(
         win,
@@ -176,42 +176,13 @@ for i, img_path in enumerate(stimuli):
         size=(image_size, image_size),
         units="pix"
     )
+
     image_data.at[i, "stim"] = stim
-    image_data_practice.at[i, "stim"] = stim
 
 # =====================================================
 # RUN REAL BLOCK
 # =====================================================
-if practice_:
-    run_block(
-    win,
-    image_data_practice,
-    stimuli_practice,
-    cue_stim,
-    fixation_cross,
-    fixation_arrows,
-    arrow_left,
-    arrow_right,
-    arrow_up,
-    arrow_down,
-    mask_pool,
-    pos_left,
-    pos_right,
-    target_img_size,
-    cue_duration,
-    fix_duration,
-    image_duration,
-    loc_response,
-    id_response,
-    n_masks_per_trial,
-    participant_num,
-    run_num,
-    output_dir,
-    output_filename,
-    practice=True)
-    
-else:
-    run_block(
+run_block(
         win,
         image_data,
         stimuli,
