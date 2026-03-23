@@ -2,7 +2,7 @@ import numpy as np
 import random
 import os
 import pandas as pd 
-from psychopy import visual, core, event, gui
+from psychopy import visual, core, event, gui, parallel
 from instructions import (
     INTRO_TEXT,
     TASK_TEXT,
@@ -295,7 +295,13 @@ def draw_and_wait(win, draw_func):
         if "escape" in keys:
             win.close()
             core.quit()
+port = parallel.ParallelPort(address=0x0378)  # LPT1
 
+def send_trigger(code):
+    port.setData(int(code))
+    core.wait(0.005)   # 5 ms pulse
+    port.setData(0)
+    
 def run_block(win,
     image_data,
     stimuli,
@@ -329,7 +335,8 @@ def run_block(win,
     output_dir,
     output_filename,
     *,  
-    practice=False):
+    practice=False,
+    send_trigger=None):
         
     
     ## ==== Create all Texts ==== ##
@@ -453,6 +460,9 @@ def run_block(win,
         cue_stim.text = image_data["cue"][i]
         cue_stim.color = image_data["cue_color"][i]
         cue_stim.draw()
+        if send_trigger is not None:
+            win.callOnFlip(send_trigger, 1)
+
         win.flip()
         core.wait(cue_duration)
         fixation_cross.draw()
@@ -477,6 +487,9 @@ def run_block(win,
         current_target.draw()
         current_distractor.draw()
         fixation_cross.draw()
+        if send_trigger is not None:
+            trig = int(image_data["trigger"][i])
+            win.callOnFlip(send_trigger, trig)
         win.flip()
         
         while global_clock.getTime() < image_onset + image_duration:
@@ -561,11 +574,15 @@ def run_block(win,
                 if key == 'left':
                     response_loc = 'L'
                     rt_loc = t
+                    if send_trigger is not None:
+                        send_trigger(99)
                     break
 
                 elif key == 'right':
                     response_loc = 'R'
                     rt_loc = t
+                    if send_trigger is not None:
+                        send_trigger(99)
                     break
 
                 elif key == 'escape':
