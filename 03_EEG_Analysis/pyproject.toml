@@ -1,0 +1,8 @@
+[project]
+name = "MaskExp"
+version = "0.1.0"
+description = "My masking expectations experiment utilities"
+authors = [{name = "Antoniya Boyanova"}]
+
+[tool.setuptools.packages.find]
+where = ["."]
