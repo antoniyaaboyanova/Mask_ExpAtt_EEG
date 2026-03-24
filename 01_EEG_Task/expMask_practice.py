@@ -64,7 +64,7 @@ while True:
 win = visual.Window(
     size=(1024, 768),
     fullscr=True,
-    screen=0,
+    screen=1,
     units='height',
     color=[0, 0, 0],
     colorSpace='rgb',

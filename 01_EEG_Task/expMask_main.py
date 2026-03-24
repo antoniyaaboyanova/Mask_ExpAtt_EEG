@@ -64,7 +64,7 @@ while True:
 win = visual.Window(
     size=(1024, 768),
     fullscr=True,
-    screen=0,
+    screen=1,
     units='height',
     color=[0, 0, 0],
     colorSpace='rgb',
@@ -149,7 +149,7 @@ cue_duration = 0.5
 fix_duration = 0.5
 image_duration = 0.017
 loc_response = 1.5
-id_response = 4
+id_response = 8
 
 # =====================================================
 # PRE-LOAD MASK POOL
@@ -207,4 +207,5 @@ run_block(
         run_num,
         output_dir,
         output_filename,
-        practice=False)
+        practice=False,
+        send_trigger=send_trigger) # send_trigger = send_trigger when we want EEG

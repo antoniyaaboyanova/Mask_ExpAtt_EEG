@@ -2,7 +2,8 @@ import numpy as np
 import random
 import os
 import pandas as pd 
-from psychopy import visual, core, event, gui, parallel
+from psychopy import visual, core, event, gui
+from psychopy import parallel
 from instructions import (
     INTRO_TEXT,
     TASK_TEXT,
@@ -10,7 +11,6 @@ from instructions import (
     START_TEXT,
     PRACTICE_TEXT
 )
-
 
 def create_cue_dynam(highProb=0.7, lowProb=0.3, neutral=1.0, trials_per_cue=40):
     
@@ -145,7 +145,7 @@ def build_constrained_order(df, seed=None, max_unexpected_run=1):
 
     return pd.DataFrame(ordered_rows).reset_index(drop=True)
 
-def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1, pick_images="_01", identity_catch=0.1): 
+def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1, pick_images="_01", identity_catch=0.05): 
     categories = os.listdir(stim_path)
     stimuli = []
     for cat in categories:
@@ -259,9 +259,6 @@ def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1, pick_ima
            5: 3,
            7: 4}
 
-
-    for key in data.keys():
-        print(f"{key} : {len(data[key])}")
     df = pd.DataFrame(data)
     df['image_index'] = df['target_id'].map(mapping)
     df['trigger'] = df.apply(assign_trigger, axis=1)
@@ -285,18 +282,17 @@ def make_text_stim(win, text):
     
 def draw_and_wait(win, draw_func):
     event.clearEvents(eventType="keyboard")
-    while True:
-        draw_func()
-        win.flip()
 
-        keys = event.getKeys(keyList=["space", "escape"])
-        if "space" in keys:
-            break
-        if "escape" in keys:
-            win.close()
-            core.quit()
-port = parallel.ParallelPort(address=0x0378)  # LPT1
+    draw_func()
+    win.flip()
 
+    keys = event.waitKeys(keyList=["space", "escape"])
+
+    if "escape" in keys:
+        win.close()
+        core.quit()
+
+port = parallel.ParallelPort(address=0x3FD8)  # LPT1
 def send_trigger(code):
     port.setData(int(code))
     core.wait(0.005)   # 5 ms pulse
@@ -354,8 +350,8 @@ def run_block(win,
     stimuli_image = visual.ImageStim(
         win,
         image="instructions_stimuli.png",
-        size=(1.0, 0.6),   # adjust if needed
-        pos=(0, -0.05)
+        size=(0.6, 0.6),   # adjust if needed
+        pos=(0, 0)
     )
 
     selection_options = 4
@@ -424,11 +420,18 @@ def run_block(win,
     for i in range(n_trials):
         
         # ==== Block break every 120 trials ====
-        if (i + 1) % 120 == 0 and i != n_trials - 1:
+        if (i + 1) % 80 == 0 and i != n_trials - 1:
             print("Participant is having a break...")
             event.clearEvents(eventType="keyboard")
             loc_acc = np.mean([t["correct_loc"] is True for t in trial_log]) * 100
-            id_acc = np.mean([t["correct_id"] is True for t in trial_log]) * 100
+
+            id_trials = [
+                t["correct_id"] is True
+                for t in trial_log
+                if t["identity_catch"]
+            ]
+
+            id_acc = np.mean(id_trials) * 100 if id_trials else 0
 
     
             break_text = visual.TextStim(
@@ -451,7 +454,7 @@ def run_block(win,
             core.wait(0.5)
         
         ## ==== ITI (jittered) ==== ##
-        iti_duration = np.random.uniform(0.5, 0.6)
+        iti_duration = np.random.uniform(0.5, 1.0)
         fixation_cross.draw()
         win.flip()
         core.wait(iti_duration)
@@ -487,9 +490,11 @@ def run_block(win,
         current_target.draw()
         current_distractor.draw()
         fixation_cross.draw()
+        
         if send_trigger is not None:
             trig = int(image_data["trigger"][i])
             win.callOnFlip(send_trigger, trig)
+        
         win.flip()
         
         while global_clock.getTime() < image_onset + image_duration:
@@ -589,7 +594,9 @@ def run_block(win,
                     win.close()
                     core.quit()
 
-        #print("Selected side:", str(response_loc), str(response_loc == image_data["target_loc"][i]))
+        print("Selected side:", str(response_loc), str(response_loc == image_data["target_loc"][i]))
+        print('RT', str(rt_loc))
+        
         win.flip()
         core.wait(0.35)
         
@@ -697,6 +704,7 @@ def run_block(win,
         "participant": participant_num,
         "block_number": run_num,
         "trial": i,
+        "trigger": image_data["trigger"][i],
         "cue": image_data["cue"][i],
         "taget_name": image_data["target_name"][i],
         "tagte_cat": image_data["target_cat"][i],
@@ -723,8 +731,15 @@ def run_block(win,
         if practice == False:
             save_data(trial_log, output_dir, output_filename)
         
-    loc_acc = np.mean([t["correct_loc"] is True for t in trial_log]) * 100
-    id_acc = np.mean([t["correct_id"] for t in trial_log if t["identity_catch"]]) * 100
+        loc_acc = np.mean([t["correct_loc"] is True for t in trial_log]) * 100
+
+        id_trials = [
+            t["correct_id"] is True
+            for t in trial_log
+            if t["identity_catch"]
+        ]
+
+        id_acc = np.mean(id_trials) * 100 if id_trials else 0
 
     if practice:
         summary_text = visual.TextStim(

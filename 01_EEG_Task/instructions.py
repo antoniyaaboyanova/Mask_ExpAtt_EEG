@@ -56,7 +56,7 @@ Press an arrow key (LEFT, RIGHT, UP, DOWN) to select the image you saw.
 ---------------------------------------------------
 
 ⚠ IMPORTANT ⚠
-Please respond fast and based on your first impression!
+Please respond ONLY WHEN YOU SEE << >>!
 Sometimes it will be really hard but try to guess!🎯
 
 Press SPACE to continue ⌨
