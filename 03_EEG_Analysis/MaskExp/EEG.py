@@ -15,7 +15,7 @@ from sklearn.metrics import accuracy_score
 
 ### Local
 from ExpAtt.data_helpers import dump_data, load_data
-from MaskExp import *
+from MaskExp.data_helpers import *
 
 def preprocess_eeg(sub, tmin = -.2, tmax = 1.0, baseline = (-.2, 0), highpass = 0.1, lowpass = 100, resample = 250):
     

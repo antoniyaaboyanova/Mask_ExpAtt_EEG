@@ -283,6 +283,18 @@ def make_text_stim(win, text):
         font='Segoe UI Emoji'  # generally emoji-safe (OS dependent)
     )
     
+def make_text_stim_new(win, text):
+    return visual.TextBox2(
+        win,
+        text=text,
+        letterHeight=25.5,   # ~1 degree (good readable size)
+        pos=(0, 0),
+        anchor='center',
+        alignment='center',
+        size=(2000, 1000),      # width x height in degrees
+        color=[-1, -1, -1]
+    )
+    
 def draw_and_wait(win, draw_func):
     event.clearEvents(eventType="keyboard")
     while True:

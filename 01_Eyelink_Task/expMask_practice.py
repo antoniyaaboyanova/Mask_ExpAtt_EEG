@@ -1,4 +1,4 @@
-from psychopy import visual, core, event, gui
+from psychopy import visual, core, event, gui, monitors
 from expMask_helpers import * 
 
 # =====================================================
@@ -61,16 +61,16 @@ while True:
 # =====================================================
 # WINDOW SETUP (must come first)
 # =====================================================
+mon = monitors.Monitor('myMonitor', width=53.0, distance=70.0)
 win = visual.Window(
-    size=(1024, 768),
     fullscr=True,
-    screen=0,
-    units='height',
+    monitor=mon,
+    screen=1,
+    size= (1920, 1080), units= "height",
     color=[0, 0, 0],
     colorSpace='rgb',
-    waitBlanking=True
+    waitBlanking=False
 )
-
 win.recordFrameIntervals = True  # timing diagnostics
 
 # =====================================================
