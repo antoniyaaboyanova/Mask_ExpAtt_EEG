@@ -725,6 +725,12 @@ def run_block(win,
                 arrow_up.draw()
                 arrow_down.draw()
                 win.flip()
+                
+            # after response loop
+            fixation_cross.draw()
+            win.flip()
+            core.wait(postresp_fix)  # ← inside the if block, with fixation visible
+        
         else:
             response_id = None
             rt_id = None
