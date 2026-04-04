@@ -1,16 +1,39 @@
 from psychopy import visual, core, event, gui, monitors
-from expMask_helpers import * 
-import time
-
-## ===== 1 Eye-Tracking Packages ==== ##
+from expMask_helpers import *
+from eyelink_helpers import setup_eyelink, drift_check, close_eyelink
 import pylink
-from EyeLinkCoreGraphicsPsychoPy import EyeLinkCoreGraphicsPsychoPy
+import time
+import os, sys
 
 # =====================================================
 # Paths
 # =====================================================
-stim_path = r".\stimuli"
+stim_path  = r".\stimuli"
 masks_path = r".\masks"
+
+# =====================================================
+# DURATIONS
+# =====================================================
+cue_duration   = 0.5
+precue_fix     = (0.8, 1.0)
+postcue_fix    = 0.5
+image_duration = 0.017
+id_response    = 2
+loc_response   = 2
+preresp_fix    = 0.5
+postresp_fix   = 0.5
+
+# =====================================================
+# POSITIONS AND SIZES  (pixels)
+# =====================================================
+ecc             = 350
+pos_left        = (-ecc, 0)
+pos_right       = ( ecc, 0)
+image_size      = 300
+cue_size        = 150
+target_img_size = 200
+arrow_size      = 50
+fix_size        = 25
 
 # =====================================================
 # Participant + Block info
@@ -21,6 +44,7 @@ while True:
     myDlg.addField("Subject ID:")
     myDlg.addField("Block ID:")
     myDlg.addField("EyeLink:", choices=["True", "False"])
+    myDlg.addField("Task Type:", choices=["loc", "ide"])
     ok_data = myDlg.show()
 
     if not myDlg.OK:
@@ -28,338 +52,201 @@ while True:
         quit()
 
     participant_num_str = ok_data[0]
-    run_num_str = ok_data[1]
-    eyelink = ok_data[2] == "True"
+    run_num_str         = ok_data[1]
+    eyelink             = ok_data[2] == "True"
+    task_type           = ok_data[3]
 
     try:
         participant_num = int(participant_num_str)
-        run_num = int(run_num_str)
+        run_num         = int(run_num_str)
     except ValueError:
         gui.popupError("Subject ID and Block ID must be integers.")
         continue
 
     output_dir = os.path.join(
-        os.getcwd(),
-        'data_expMask',
-        f"sub-{participant_num:04d}"
-    )
+        os.getcwd(), 'data_expMask', f"sub-{participant_num:04d}")
     os.makedirs(output_dir, exist_ok=True)
 
-    output_filename = f"sub-{participant_num:02d}_run-{run_num:02d}.csv"
-    output_path = os.path.join(output_dir, output_filename)
+    output_filename = f"sub-{participant_num:02d}_run-{run_num:02d}_{task_type}.csv"
+    output_path     = os.path.join(output_dir, output_filename)
 
-    # CHECK IF FILE EXISTS 
     if os.path.exists(output_path):
         overwriteDlg = gui.Dlg(title="File already exists")
         overwriteDlg.addText(
-            f"The file:\n\n{output_filename}\n\nalready exists.\n\nOverwrite?"
-        )
+            f"The file:\n\n{output_filename}\n\nalready exists.\n\nOverwrite?")
         overwriteDlg.addField("Overwrite file?", choices=["Yes", "No"])
         overwrite = overwriteDlg.show()
-
         if overwriteDlg.OK and overwrite[0] == "Yes":
-            break  # proceed with experiment
+            break
         else:
-            continue  # restart subject/run entry
-
+            continue
     else:
-        break  # file does not exist → proceed
-
-# Set up a folder to store the EDF data files and the associated resources
-# e.g., files defining the interest areas used in each trial
-# edf fname no more than 8 char long
-edf_fname = f"{run_num:02d}_{participant_num:04d}"
-calibration_flag_file = os.path.join(output_dir, f"{participant_num:04d}_calibration.txt")
-results_folder = 'eyelink_results'
-if not os.path.exists(results_folder):
-    os.makedirs(results_folder)
-
-# We download EDF data file from the EyeLink Host PC to the local hard
-# drive at the end of each testing session, here we rename the EDF to
-# include session start date/time
-time_str = time.strftime("_%Y_%m_%d_%H_%M", time.localtime())
-session_identifier = edf_fname + time_str
-
-# create a folder for the current testing session in the "results" folder
-session_folder = os.path.join(results_folder, session_identifier)
-if not os.path.exists(session_folder):
-    os.makedirs(session_folder)
-    
-# Set up eyelink
-if eyelink:
-    dummy_mode = False
-else:
-    dummy_mode = True
-    
-# Step 1: Connect to the EyeLink Host PC
-#
-# The Host IP address, by default, is "100.1.1.1".
-# the "el_tracker" objected created here can be accessed through the Pylink
-# Set the Host PC address to "None" (without quotes) to run the script
-# in "Dummy Mode"
-if dummy_mode:
-    el_tracker = pylink.EyeLink(None)
-else:
-    try:
-        el_tracker = pylink.EyeLink("100.1.1.1")
-    except RuntimeError as error:
-        print('ERROR:', error)
-        core.quit()
-        sys.exit()
-
-# Step 2: Open an EDF data file on the Host PC
-edf_file = edf_fname + ".EDF"
-try:
-    el_tracker.openDataFile(edf_file)
-except RuntimeError as err:
-    print('ERROR:', err)
-    # close the link if we have one open
-    if el_tracker.isConnected():
-        el_tracker.close()
-    core.quit()
-    sys.exit()
-# Add a header text to the EDF file to identify the current experiment name
-# This is OPTIONAL. If your text starts with "RECORDED BY " it will be
-# available in DataViewer's Inspector window by clicking
-# the EDF session node in the top panel and looking for the "Recorded By:"
-# field in the bottom panel of the Inspector.
-preamble_text = 'RECORDED BY %s' % os.path.basename(__file__)
-el_tracker.sendCommand("add_file_preamble_text '%s'" % preamble_text)
-
-# Step 3: Configure the tracker
-# Put the tracker in offline mode before we change tracking parameters
-el_tracker.setOfflineMode()
-
-# Get the software version:  1-EyeLink I, 2-EyeLink II, 3/4-EyeLink 1000,
-# 5-EyeLink 1000 Plus, 6-Portable DUO
-eyelink_ver = 0  # set version to 0, in case running in Dummy mode
-if not dummy_mode:
-    vstr = el_tracker.getTrackerVersionString()
-    eyelink_ver = int(vstr.split()[-1].split('.')[0])
-    # print out some version info in the shell
-    print('Running experiment on %s, version %d' % (vstr, eyelink_ver))
-
-# File and Link data control
-# what eye events to save in the EDF file, include everything by default
-file_event_flags = 'LEFT,RIGHT,FIXATION,SACCADE,BLINK,MESSAGE,BUTTON,INPUT'
-# what eye events to make available over the link, include everything by default
-link_event_flags = 'LEFT,RIGHT,FIXATION,SACCADE,BLINK,BUTTON,FIXUPDATE,INPUT'
-# what sample data to save in the EDF data file and to make available
-# over the link, include the 'HTARGET' flag to save head target sticker
-# data for supported eye trackers
-if eyelink_ver > 3:
-    file_sample_flags = 'LEFT,RIGHT,GAZE,HREF,RAW,AREA,HTARGET,GAZERES,BUTTON,STATUS,INPUT'
-    link_sample_flags = 'LEFT,RIGHT,GAZE,GAZERES,AREA,HTARGET,STATUS,INPUT'
-else:
-    file_sample_flags = 'LEFT,RIGHT,GAZE,HREF,RAW,AREA,GAZERES,BUTTON,STATUS,INPUT'
-    link_sample_flags = 'LEFT,RIGHT,GAZE,GAZERES,AREA,STATUS,INPUT'
-el_tracker.sendCommand("file_event_filter = %s" % file_event_flags)
-el_tracker.sendCommand("file_sample_data = %s" % file_sample_flags)
-el_tracker.sendCommand("link_event_filter = %s" % link_event_flags)
-el_tracker.sendCommand("link_sample_data = %s" % link_sample_flags)
-
-# Optional tracking parameters
-# Sample rate, 250, 500, 1000, or 2000, check your tracker specification
-# if eyelink_ver > 2:
-#     el_tracker.sendCommand("sample_rate 1000")
-# Choose a calibration type, H3, HV3, HV5, HV13 (HV = horizontal/vertical),
-el_tracker.sendCommand("calibration_type = HV9")
-# Set a gamepad button to accept calibration/drift check target
-# You need a supported gamepad/button box that is connected to the Host PC
-el_tracker.sendCommand("button_function 5 'accept_target_fixation'")
+        break
 
 # =====================================================
-# WINDOW SETUP (must come first)
+# EDF filename  (max 8 chars, no extension)
 # =====================================================
-# Open a window, be sure to specify monitor parameters
-mon = monitors.Monitor('myMonitor', width=53.0, distance=70.0)
-mon.setSizePix((1600, 1200))  # <-- ADD THIS (use your actual resolution)
+edf_fname = f"{task_type}{run_num:02d}{participant_num:02d}"  # e.g. "loc0101"
+eyetracking_folder = 'eyelink_results'
+session_folder = os.path.join(eyetracking_folder, f"sub-{participant_num:04d}")
+os.makedirs(session_folder, exist_ok=True)
+
+# =====================================================
+# WINDOW  (single, created once)
+# =====================================================
+mon = monitors.Monitor('myMonitor', width=41.0, distance=57.0)
+mon.setSizePix((1280, 1024))
 win = visual.Window(
-    size=(1600, 1200),
+    size=(1280, 1024),
     fullscr=True,
     monitor=mon,
-    screen=1,
-    units='height',   # <-- change this
+    screen=0,
+    units='pix',
     color=[0, 0, 0],
     colorSpace='rgb',
-    waitBlanking=True
-)
-
-win.recordFrameIntervals = True  # timing diagnostics
+    waitBlanking=True)
+win.recordFrameIntervals = True
 
 # =====================================================
-# CALLIBRATION SET UP
+# EYELINK SETUP  (after window — genv needs win)
 # =====================================================
-# get the native screen resolution used by PsychoPy
-scn_width, scn_height = win.size
-
-el_tracker = pylink.EyeLink("100.1.1.1")
-edf_file = edf_fname + ".EDF"
-el_tracker.openDataFile(edf_file)
-
-el_coords = "screen_pixel_coords = 0 0 %d %d" % (scn_width - 1, scn_height - 1)
-el_tracker.sendCommand(el_coords)
-dv_coords = "DISPLAY_COORDS 0 0 %d %d" % (scn_width - 1, scn_height - 1)
-el_tracker.sendMessage(dv_coords)
-    
-
-## ==== Eye-tracking Calibration ==== ##
-#eyeok = visual.TextBox2(win, pos = [0,0], text = 'Please follow the black dot and keep your gaze on that!', alignText = 'center', size=(1.1, 0.8))
-eyeok= make_text_stim(win, 'Please follow the black dot and keep your gaze on that!')
-eyeok.draw()
-win.flip()
-
-genv = EyeLinkCoreGraphicsPsychoPy(el_tracker, win)
-pylink.openGraphicsEx(genv)
-el_tracker.doTrackerSetup()
-
-# Create the calibration flag file
-print('Calibration done')
-
-# reopen wimdow after calibration
-win = visual.Window(
-    size=(1600, 1200),
-    fullscr=True,
-    monitor=mon,
-    screen=1,
-    units='height',   # <-- change this
-    color=[0, 0, 0],
-    colorSpace='rgb',
-    waitBlanking=True
-)
+dummy_mode = not eyelink
+el_tracker = setup_eyelink(
+    win=win,
+    edf_filename=edf_fname,
+    edf_folder=session_folder,
+    dummy=dummy_mode,
+    calibration_required=True)
 
 # =====================================================
-# CUE DATA
+# CUE + IMAGE DATA
 # =====================================================
 cue_data = create_cue_dynam()
 
-# =====================================================
-# IMAGE DATA
-# =====================================================
-random_seed = participant_num + run_num 
-image_data, stimuli = create_block_trials(stim_path, cue_data, random_seed=random_seed, identity_catch=1.0)
-n_trials = len(image_data)
+random_seed = participant_num + run_num
+if task_type == "ide":
+    identity_catch_prob = 1.0
+    location_catch_prob = 0.0
+else:
+    identity_catch_prob = 0.0
+    location_catch_prob = 1.0
 
-
-# =====================================================
-# MASK SETUP
-# =====================================================
-all_masks = os.listdir(masks_path)
-
-# =====================================================
-# POSITIONS AND SIZES
-# =====================================================
-ecc = 350 
-pos_left = (-ecc, 0)
-pos_right = ( ecc, 0)
-
-image_size = 400
-target_img_size = 150
-eight_image_layout = False
+image_data, stimuli = create_block_trials(
+    stim_path, cue_data,
+    random_seed=random_seed,
+    identity_catch=identity_catch_prob,
+    location_catch=location_catch_prob)
 
 # =====================================================
 # STIMULI
 # =====================================================
-## ==== Create Cue Stim ==== ##
-cue_stim = visual.TextStim(
-    win, text='', height=0.08, ori=0.0, pos=(0, 0), colorSpace='rgb'
-)
+cue_stim = visual.ImageStim(win, size=(cue_size, cue_size), units='pix', pos=(0, 0))
 
-## ==== Create Fixation Cross ==== ##
-fixation_cross= visual.ShapeStim(
-        win=win, name='polygon', vertices='cross',
-        size=(50, 50), units='pix',
-        ori=0.0, pos=(0, 0), draggable=False, anchor='center',
-        lineWidth=1.0,
-        colorSpace='rgb', lineColor='white', fillColor='white',
-        opacity=None, depth=0.0, interpolate=True)
-        
+fixation_cross = visual.ShapeStim(
+    win=win, vertices='cross',
+    size=(fix_size, fix_size),
+    ori=0.0, pos=(0, 0), anchor='center',
+    lineWidth=0.5, colorSpace='rgb',
+    lineColor='black', fillColor='black',
+    interpolate=True)
+
 fixation_arrows = visual.TextStim(
-    win=win,
-    text='<<  >>',
-    font='Arial',
-    units='pix',      # ← ADD THIS
-    pos=(0, 0),
-    height=40,        # now 40 pixels
-    color='white'
-)
+    win=win, text='<<  >>',
+    font='Arial', units='pix',
+    pos=(0, 0), height=40, color='black')
 
-
-## ==== Create Target/Distractor Stim ==== ##
-target_stim = visual.ImageStim(win,size=(image_size, image_size), units='pix')
-distractor_stim = visual.ImageStim(win,size=(image_size, image_size), units='pix')
-
-mask_left = visual.ImageStim(win, size=(image_size, image_size), units='pix', pos=pos_left)
-mask_right = visual.ImageStim(win, size=(image_size, image_size), units='pix', pos=pos_right)
-
-arrow_left = visual.ImageStim(win, image=".\\arrows\\left.png", size=(target_img_size, target_img_size), units='pix')
-arrow_right = visual.ImageStim(win, image=".\\arrows\\right.png", size=(target_img_size, target_img_size), units='pix')
-arrow_up = visual.ImageStim(win, image=".\\arrows\\up.png", size=(target_img_size, target_img_size), units='pix')
-arrow_down = visual.ImageStim(win, image=".\\arrows\\down.png", size=(target_img_size, target_img_size), units='pix')
-
-# =====================================================
-# DURATIONS
-# =====================================================
-cue_duration = 0.5
-fix_duration = 0.5
-image_duration = 0.017
-loc_response = 1.5
-id_response = 4
+target_stim     = visual.ImageStim(win, size=(image_size, image_size), units='pix')
+distractor_stim = visual.ImageStim(win, size=(image_size, image_size), units='pix')
+mask_left       = visual.ImageStim(win, size=(image_size, image_size), units='pix', pos=pos_left)
+mask_right      = visual.ImageStim(win, size=(image_size, image_size), units='pix', pos=pos_right)
 
 # =====================================================
 # PRE-LOAD MASK POOL
 # =====================================================
-# Create a list of stimulus objects for every mask file
+all_masks = os.listdir(masks_path)
 print("Loading masks into memory...")
 mask_pool = []
 for m_file in all_masks:
-    full_path = os.path.join(masks_path, m_file)
-    # We create the objects once here
-    s = visual.ImageStim(win, image=full_path, size=(image_size, image_size), units='pix')
+    s = visual.ImageStim(win, image=os.path.join(masks_path, m_file),
+                         size=(image_size, image_size), units='pix')
     mask_pool.append(s)
 n_masks_per_trial = 12
 
 # =====================================================
-# PRE-LOAD Image POOL
+# PRE-LOAD IMAGE POOL
 # =====================================================
 print("Loading stims into memory...")
-image_data["stim"] = None 
+image_data["stim"] = None
 for i, img_path in enumerate(stimuli):
-    stim = visual.ImageStim(
-        win,
-        image=img_path,
-        size=(image_size, image_size),
-        units="pix"
-    )
-
-    image_data.at[i, "stim"] = stim
+    image_data.at[i, "stim"] = visual.ImageStim(
+        win, image=img_path, size=(image_size, image_size), units="pix")
 
 # =====================================================
-# RUN REAL BLOCK
+# PRE-LOAD SELECTION IMAGES
 # =====================================================
-run_block(
+print("Preparing identity selection stims...")
+only_target_indexes = image_data["target_id"].unique()
+only_targets        = stimuli[only_target_indexes]
+
+image_data["only_targets"]       = None
+image_data["only_targets_names"] = None
+for i, img_path in enumerate(stimuli):
+    if img_path in only_targets:
+        image_data.at[i, "only_targets"] = visual.ImageStim(
+            win, image=img_path, size=(target_img_size, target_img_size), units="pix")
+        image_data.at[i, "only_targets_names"] = img_path
+
+# =====================================================
+# RUN BLOCK
+# =====================================================
+try:
+    print("Starting run_block...")
+    run_block(
         win,
+        el_tracker,
         image_data,
         stimuli,
         cue_stim,
         fixation_cross,
         fixation_arrows,
-        arrow_left,
-        arrow_right,
-        arrow_up,
-        arrow_down,
         mask_pool,
         pos_left,
         pos_right,
-        target_img_size,
+        
         cue_duration,
-        fix_duration,
+        precue_fix,
+        postcue_fix,
         image_duration,
-        loc_response,
         id_response,
+        loc_response,
+        preresp_fix,
+        postresp_fix,
         n_masks_per_trial,
+        
         participant_num,
         run_num,
         output_dir,
         output_filename,
-        practice=False)
+        session_folder,
+        edf_fname,
+        break_number=80,
+        practice=False,
+        dummy=dummy_mode,
+        instruct=task_type) # ← NEW
+
+# =====================================================
+# CLEAN SHUTDOWN  (always runs, even on crash)
+# =====================================================
+finally:
+    # Only reached on crash or escape — normal exit already transferred in run_block
+    if eyelink and el_tracker.isConnected():
+        try:
+            el_tracker.stopRecording()
+            el_tracker.closeDataFile()
+            local_edf = os.path.join(session_folder, edf_fname + ".EDF")
+            el_tracker.receiveDataFile(edf_fname + ".EDF", local_edf)
+        except Exception as e:
+            print(f"EDF transfer on abort failed: {e}")
+        el_tracker.close()
+    win.close()
+    core.quit()
