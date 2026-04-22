@@ -110,6 +110,10 @@ def drift_check(el_tracker, win, fixation_cross, dummy=False):
         el_tracker.doDriftCorrect(scn_w // 2, scn_h // 2, 1, 1)
     except RuntimeError:
         el_tracker.doTrackerSetup()
+    
+    # doDriftCorrect stops recording — restart it
+    el_tracker.startRecording(1, 1, 1, 1)
+    pylink.msecDelay(50)
 
 
 def close_eyelink(el_tracker, edf_filename, edf_folder):
