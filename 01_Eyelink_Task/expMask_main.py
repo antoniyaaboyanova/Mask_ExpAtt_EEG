@@ -26,7 +26,7 @@ postresp_fix   = 0.5
 # =====================================================
 # POSITIONS AND SIZES  (pixels)
 # =====================================================
-ecc             = 350
+ecc             = 450
 pos_left        = (-ecc, 0)
 pos_right       = ( ecc, 0)
 image_size      = 300
@@ -86,7 +86,7 @@ while True:
 # =====================================================
 # EDF filename  (max 8 chars, no extension)
 # =====================================================
-edf_fname = f"{task_type}{run_num:02d}{participant_num:02d}"  # e.g. "loc0101"
+edf_fname = f"{task_type}{run_num:02d}_{participant_num:02d}"  # e.g. "loc01_01"
 eyetracking_folder = 'eyelink_results'
 session_folder = os.path.join(eyetracking_folder, f"sub-{participant_num:04d}")
 os.makedirs(session_folder, exist_ok=True)
@@ -100,7 +100,7 @@ win = visual.Window(
     size=(1280, 1024),
     fullscr=True,
     monitor=mon,
-    screen=0,
+    screen=1,
     units='pix',
     color=[0, 0, 0],
     colorSpace='rgb',
@@ -229,7 +229,7 @@ try:
         output_filename,
         session_folder,
         edf_fname,
-        break_number=80,
+        break_number=120,
         practice=False,
         dummy=dummy_mode,
         instruct=task_type) # ← NEW

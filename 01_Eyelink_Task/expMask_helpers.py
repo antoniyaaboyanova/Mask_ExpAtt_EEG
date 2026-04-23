@@ -741,3 +741,27 @@ def run_block(win,
 def save_data(data, output_dir, filename):
     df = pd.DataFrame(data)
     df.to_csv(os.path.join(output_dir,filename), index=False)
+    
+def pixels_to_degrees(pixels, distance, screen_width, resolution_width):
+    """
+    Convert pixels to degrees of visual angle.
+
+    Parameters:
+        pixels (int): Number of pixels to convert.
+        distance (float): Distance from the observer to the screen (same units as screen_width).
+        screen_width (float): Physical width of the screen (same units as distance).
+        resolution_width (int): Horizontal resolution of the screen (in pixels).
+
+    Returns:
+        float: Visual angle in degrees.
+    """
+    # Physical size of a single pixel
+    pixel_size = screen_width / resolution_width
+
+    # Physical size of the object (in the same units as screen_width)
+    object_size = pixel_size * pixels
+
+    # Calculate visual angle using the formula
+    visual_angle = 2 * math.degrees(math.atan((object_size / 2) / distance))
+
+    return visual_angle
