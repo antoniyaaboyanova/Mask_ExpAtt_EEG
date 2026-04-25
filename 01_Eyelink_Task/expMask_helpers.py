@@ -16,10 +16,8 @@ from instructions import (
 # =====================================================
 # Trial Functions
 # =====================================================
-def create_cue_dynam(highProb=0.7, lowProb=0.3, neutral=1.0, trials_per_cue=40):
+def create_cue_dynam(highProb=0.7, lowProb=0.3, neutral=1.0, trials_per_cue=40, trial_per_neutral=32):
     
-   
-    trial_per_neutral = trials_per_cue
     
     cue_data = {"cue_names": [".\\cues\\Sea_Animal.png",  ".\\cues\\Water_Vehicle.png",  ".\\cues\\Neutral.png"],
                 "cue_highProb_cats": [["dolphin", "whale"], ["speedboat", "submarine"], 
@@ -527,10 +525,13 @@ def run_block(win,
         current_distractor.draw()
         win.flip()
         if el_tracker is not None:
-            el_tracker.sendMessage(f"STIM_ONSET trigger_{image_data['trigger'][i]}")
+            el_tracker.sendMessage(f"IMG_ONSET trigger_{image_data['trigger'][i]}")
             
         while global_clock.getTime() < image_onset + image_duration:
             pass
+        
+        if el_tracker is not None:
+            el_tracker.sendMessage(f"IMG_OFFSET trigger_{image_data['trigger'][i]}")
 
         image_offset = global_clock.getTime()
         print(f"Trial {i}: Image duration = {image_offset - image_onset}")
@@ -548,6 +549,8 @@ def run_block(win,
 
         mask_i = 0
         mask_durations = []
+        if el_tracker is not None:
+            el_tracker.sendMessage(f"MASK_ONSET trigger_{image_data['trigger'][i]}")
         for lm_stim, rm_stim in zip(trial_masks_left, trial_masks_right):
             lm_stim.pos = pos_left
             rm_stim.pos = pos_right
@@ -565,7 +568,7 @@ def run_block(win,
             mask_i += 1
 
         if el_tracker is not None:
-            el_tracker.sendMessage(f"STIM_OFFSET trigger_{image_data['trigger'][i]}")
+            el_tracker.sendMessage(f"MASK_OFFSET trigger_{image_data['trigger'][i]}")
         actual_mask_duration = np.mean(mask_durations)
         short_isi_st = win.flip()
 
@@ -581,6 +584,8 @@ def run_block(win,
         if image_data["identity_catch"][i]:
             win.flip()
             core.wait(preresp_fix)
+            if el_tracker is not None:
+                el_tracker.sendMessage(f"RESPONSE_ONSET")
 
             distractor_selection_id = image_data["distractor_selection_id"][i]
             target     = image_data['only_targets'][target_id]
@@ -623,6 +628,8 @@ def run_block(win,
         elif image_data["location_catch"][i]:
             win.flip()
             core.wait(preresp_fix)
+            if el_tracker is not None:
+                el_tracker.sendMessage(f"RESPONSE_ONSET")
 
             key_to_loc = {"left": "L", "right": "R"}
 
