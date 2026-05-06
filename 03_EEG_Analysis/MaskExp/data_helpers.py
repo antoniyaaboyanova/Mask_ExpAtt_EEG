@@ -3,14 +3,54 @@ import os
 
 # Events functions 
 def get_main_events():
-    base = np.array([1,2,3,4,5,6,7,8])
+    base = np.array([1,2,3,4])
     mask_conds = np.append(base + 10, base + 20)
     events = np.append(mask_conds, mask_conds + 100)
     events = np.append(events, mask_conds + 200)
     return events
 
-def condition_events(allowed_events, rename_cond="side"):
-    valid_conds = {"side", "side/mask", "stims", "side/mask/cue"}
+def extract_expectations(eeg, ids):
+    """Extract neutral, expected, and unexpected condition epochs from EEG data.
+
+    Parameters
+    ----------
+    eeg : ndarray
+        EEG epochs, shape (n_trials, n_sensors, n_time).
+    ids : ndarray
+        Condition identifiers for each trial, shape (n_trials,).
+
+    Returns
+    -------
+    neutral : ndarray
+        Sorted EEG epochs for the neutral condition.
+    expected : ndarray
+        Sorted EEG epochs for the expected condition.
+    unexpected : ndarray
+        Sorted EEG epochs for the unexpected condition.
+    """
+    neutral = np.array([11,12,13,14,21,22,23,24])
+    expected = neutral + 100
+    unexpected = neutral + 200
+
+    conditions = [neutral, expected, unexpected]
+    sorted_conditions = []
+
+    for condition in conditions:
+        condition_mask = np.isin(ids, condition)
+        condition_ids = ids[condition_mask]
+        condition_eeg = eeg[condition_mask]
+
+        if condition_ids.size == 0:
+            raise ValueError(f"No trials found for condition {condition[:5]}...")
+
+        min_trials = np.min(np.unique(condition_ids, return_counts=True)[1])
+        sorted_conditions.append(sort_eeg(condition_eeg, condition_ids, min_trials=min_trials))
+
+    neutral, expected, unexpected = sorted_conditions
+    return neutral, expected, unexpected
+
+def condition_events(allowed_events, rename_cond="stims"):
+    valid_conds = {"mask", "mask/cue", "stims"}
     
     if rename_cond not in valid_conds:
         raise ValueError(f"rename_cond must be one of {valid_conds}, got '{rename_cond}'")
@@ -25,19 +65,13 @@ def condition_events(allowed_events, rename_cond="side"):
             rename_dict[key] = key
             continue
 
-        # shared logic
-        base_digit = event_num % 10
-        side = "Left" if base_digit in [1, 2, 3, 4] else "Right"
 
-        if rename_cond == "side":
-            rename_dict[key] = side
-
-        elif rename_cond == "side/mask":
+        elif rename_cond == "mask":
             second_digit = int(s[0]) if len(s) == 2 else int(s[1])
             mask = "Short" if second_digit == 1 else "Long"
-            rename_dict[key] = f"{side}/{mask}"
+            rename_dict[key] = f"{mask}"
         
-        elif rename_cond == "side/mask/cue":
+        elif rename_cond == "mask/cue":
             second_digit = int(s[0]) if len(s) == 2 else int(s[1])
             
             mask = "Short" if second_digit == 1 else "Long"
@@ -53,66 +87,16 @@ def condition_events(allowed_events, rename_cond="side"):
             else:
                 cue = "Neutral"
 
-            rename_dict[key] = f"{side}/{mask}/{cue}"
+            rename_dict[key] = f"{mask}/{cue}"
 
     return rename_dict
 
-def condition_events_decoding(rename_cond="side"):
-    
-    allowed_events = get_main_events()
-    valid_conds = {"side", "side/mask", "side/mask/cue-category", "mask/cue-category"}
-    if rename_cond not in valid_conds:
-            raise ValueError(f"rename_cond must be one of {valid_conds}, got '{rename_cond}'")
-
-    rename_dict = {}
-
-    for event_num in allowed_events:
-        s = str(event_num)
-        key = event_num
-
-        # shared logic
-        side = event_num % 10
-
-        if rename_cond == "side":
-            rename_dict[key] = side
-
-        elif rename_cond == "side/mask":
-            second_digit = int(s[0]) if len(s) == 2 else int(s[1])
-            mask = second_digit
-            rename_dict[key] = int(f"{mask}{side}")
-        
-        elif rename_cond == "side/mask/cue-category":
-            mask = int(s[0]) if len(s) == 2 else int(s[1])
-            cue = 0 if len(s) == 2 else int(s[0])
-            #side = (side + 1) // 2 ### this would be the logic if I fix the triggers
-            block = (side - 1) // 4          # which block of 4 you're in
-            pos = (side - 1) % 4 + 1         # position inside the block (1–4)
-
-            if pos in (1, 4):
-                side = block * 2 + 1
-            else:
-                side = block * 2 + 2
-            rename_dict[key] = int(f"{cue}{mask}{side}")
-            
-                
-        elif rename_cond == "mask/cue-category":
-            mask = int(s[0]) if len(s) == 2 else int(s[1])
-            cue = 0 if len(s) == 2 else int(s[0])
-            #side = (side + 1) // 2 ### this would be the logic if I fix the triggers
-            block = (side - 1) // 4          # which block of 4 you're in
-            pos = (side - 1) % 4 + 1 
-            if pos in (1, 4):
-                side = block * 2 + 1
-            else:
-                side = block * 2 + 1
-            rename_dict[key] = int(f"{cue}{mask}{side}")
-    
-    return rename_dict
     
 def sort_eeg(eeg, ids, min_trials):
     tot_trials, channels, time = eeg.shape
     unique_ids = np.unique(ids)
     image_conditions = len(unique_ids)
+    print(unique_ids)
     sorted_eeg = np.full((image_conditions, min_trials, channels, time), np.nan)
     for uid_idx, uid in enumerate(unique_ids):
         uid_mask = np.isin(ids, uid)
