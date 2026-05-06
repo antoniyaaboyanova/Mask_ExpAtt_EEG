@@ -17,16 +17,16 @@ masks_path = r".\masks"
 cue_duration   = 0.5
 precue_fix     = (0.8, 1.0)
 postcue_fix    = 0.5
-image_duration = 0.017
+image_duration = 0.0165
 id_response    = 2
 loc_response   = 2
-preresp_fix    = 0.5
+preresp_fix    = 0.2
 postresp_fix   = 0.5
 
 # =====================================================
 # POSITIONS AND SIZES  (pixels)
 # =====================================================
-ecc             = 450
+ecc             = 300
 pos_left        = (-ecc, 0)
 pos_right       = ( ecc, 0)
 image_size      = 300
@@ -34,6 +34,7 @@ cue_size        = 150
 target_img_size = 200
 arrow_size      = 50
 fix_size        = 25
+
 
 # =====================================================
 # Participant + Block info
@@ -121,7 +122,7 @@ el_tracker = setup_eyelink(
 # =====================================================
 # CUE + IMAGE DATA
 # =====================================================
-cue_data = create_cue_dynam(trials_per_cue=10, trial_per_neutral=8)
+cue_data = create_cue_dynam(trials_per_cue=8, trial_per_neutral=8)
 
 random_seed = participant_num + run_num
 if task_type == "ide":
@@ -230,7 +231,7 @@ try:
         session_folder,
         edf_fname,
         break_number=12,
-        practice=False,
+        practice=True,
         dummy=dummy_mode,
         instruct=task_type) # ← NEW
 

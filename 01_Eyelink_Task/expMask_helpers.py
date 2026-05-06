@@ -2,6 +2,8 @@ import numpy as np
 import random
 import os
 import pandas as pd 
+import math
+
 from psychopy import visual, core, event, gui
 from eyelink_helpers import *
 from instructions import (
@@ -51,7 +53,7 @@ def create_cue_dynam(highProb=0.7, lowProb=0.3, neutral=1.0, trials_per_cue=40, 
 def assign_trigger(row, late=0.100):
 
     # ---- MASK ----
-    if row['mask_ISI'] == 0.017:
+    if row['mask_ISI'] == 0.0165:
         mask_code = 10
     elif row['mask_ISI'] == late:
         mask_code = 20
@@ -179,7 +181,7 @@ def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1, identity
         "target_loc": []
     }
 
-    mask_type = [0.017, long_isi]
+    mask_type = [0.0165, long_isi]
     distractors = stimuli[np.char.count(stimuli, "mask") > 0]
     distractor_ids = np.arange(len(stimuli))[np.isin(stimuli, distractors)]
     local_distractor_ids = np.arange(0, len(distractors))
@@ -287,8 +289,8 @@ def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1, identity
     # ---- Derived columns (computed after all rows are collected) ----
     n_total = len(data["target"])
 
-    data["target_selection_loc"]    = [np.random.choice(["L", "R"], p=[0.5, 0.5]) for _ in range(n_total)]
-    data["distractor_selection_loc"] = ["R" if x == "L" else "L" for x in data["target_selection_loc"]]
+    data["target_selection_loc"]    = [np.random.choice(["up", "down"], p=[0.5, 0.5]) for _ in range(n_total)]
+    data["distractor_selection_loc"] = ["down" if x == "up" else "up" for x in data["target_selection_loc"]]
     data["distractor_loc"]           = ["R" if x == "L" else "L" for x in data["target_loc"]]
 
     for key in data.keys():
@@ -414,6 +416,8 @@ def run_block(win,
     ecc = 200
     pos_left_selection  = (-ecc, 0)
     pos_right_selection = ( ecc, 0)
+    pos_up_selection    = (0,  ecc)
+    pos_down_selection  = (0, -ecc)
 
     # =====================================================
     # INTRODUCTION
@@ -591,12 +595,12 @@ def run_block(win,
             target     = image_data['only_targets'][target_id]
             distractor = image_data['only_targets'][distractor_selection_id]
 
-            target.pos     = pos_left_selection  if image_data["target_selection_loc"][i]     == "L" else pos_right_selection
-            distractor.pos = pos_left_selection  if image_data["distractor_selection_loc"][i] == "L" else pos_right_selection
+            target.pos     = pos_up_selection  if image_data["target_selection_loc"][i]     == "up" else pos_down_selection
+            distractor.pos = pos_down_selection  if image_data["target_selection_loc"][i]     == "up" else pos_up_selection
 
             key_to_stim = {
-                "left":  target     if image_data["target_selection_loc"][i] == "L" else distractor,
-                "right": target     if image_data["target_selection_loc"][i] == "R" else distractor,
+                "up":  target     if image_data["target_selection_loc"][i] == "up" else distractor,
+                "down": target     if image_data["target_selection_loc"][i] == "down" else distractor,
             }
 
             event.clearEvents(eventType='keyboard')
@@ -606,7 +610,7 @@ def run_block(win,
             response_clock = core.Clock()
 
             while response_id is None and response_clock.getTime() < id_response:
-                keys = event.getKeys(keyList=["left", "right", "escape"], timeStamped=response_clock)
+                keys = event.getKeys(keyList=["up", "down", "escape"], timeStamped=response_clock)
                 for key, t in keys:
                     if key == "escape":
                         win.close(); core.quit()
@@ -739,7 +743,7 @@ def run_block(win,
     label = "Practice complete!" if practice else f"Block {run_num + 1} complete!"
     summary_text = visual.TextStim(
         win,
-        text=f"{label}\n\nAccuracy: {acc:.1f}%\n\nPress Space to exit",
+        text=f"{label}\n\nAccuracy: {acc:.1f}%\n\nDo NOT press any button!\n\n The experimenter will be with you soon.",
         height=40, color=[-1, -1, -1], wrapWidth=856)
     draw_and_wait(win, lambda: summary_text.draw())
     return trial_log

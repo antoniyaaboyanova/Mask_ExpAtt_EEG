@@ -47,14 +47,14 @@ you will have to identify the image you just saw.
 === YOUR TASK === 
 You need to state WHAT exact image appeared? 
 
-You will be shown 2 image choices -> one the Left and Righ side.
+You will be shown 2 image choices -> on the Upper and Lower side.
 
 !! IMPORTANT !!
 At this point where the image appeared should be irrelavent to your choice.
 You only need to state WHICH EXACT image you saw.
 
 At this point you need to:    
-Press an arrow key (LEFT, RIGHT) to select the image you saw.
+Press an arrow key (UP, DOWN) to select the image you saw.
 Even if you are not sure try to give your best guess!
  
 

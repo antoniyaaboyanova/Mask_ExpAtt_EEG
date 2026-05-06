@@ -17,16 +17,18 @@ masks_path = r".\masks"
 cue_duration   = 0.5
 precue_fix     = (0.8, 1.0)
 postcue_fix    = 0.5
-image_duration = 0.017
+image_duration = 0.0165
 id_response    = 2
 loc_response   = 2
-preresp_fix    = 0.5
-postresp_fix   = 0.5
+
+preresp_fix    = 0.2
+postresp_fix   = 0.5   
+ 
 
 # =====================================================
 # POSITIONS AND SIZES  (pixels)
 # =====================================================
-ecc             = 450
+ecc             = 300
 pos_left        = (-ecc, 0)
 pos_right       = ( ecc, 0)
 image_size      = 300
@@ -122,6 +124,7 @@ el_tracker = setup_eyelink(
 # CUE + IMAGE DATA
 # =====================================================
 cue_data = create_cue_dynam()
+
 
 random_seed = participant_num + run_num
 if task_type == "ide":
