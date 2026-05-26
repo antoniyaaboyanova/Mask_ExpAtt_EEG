@@ -3,6 +3,20 @@ import os
 
 # Events functions 
 def get_main_events():
+    """Return the main event identifiers for the experiment.
+
+    Returns
+    -------
+    events : ndarray
+        Array of event identifiers which cross mask and expectation conditions.
+
+    Identifiers explained
+    -------
+    10s -> early mask, 20s -> late mask
+    in the tens -> neutral condition
+    in the hundrends -> expected condition 
+    in the two hunderends -> unexpected condition
+    """
     base = np.array([1,2,3,4])
     mask_conds = np.append(base + 10, base + 20)
     events = np.append(mask_conds, mask_conds + 100)
@@ -50,6 +64,20 @@ def extract_expectations(eeg, ids):
     return neutral, expected, unexpected
 
 def condition_events(allowed_events, rename_cond="stims"):
+    """Create a mapping of event labels based on allowed events and naming style.
+
+    Parameters
+    ----------
+    allowed_events : iterable
+        Event numbers to include in the mapping.
+    rename_cond : str, optional
+        Naming style for the returned labels. Must be one of "mask", "mask/cue", or "stims".
+
+    Returns
+    -------
+    rename_dict : dict
+        Mapping from original event labels to renamed labels.
+    """
     valid_conds = {"mask", "mask/cue", "stims"}
     
     if rename_cond not in valid_conds:
@@ -93,10 +121,26 @@ def condition_events(allowed_events, rename_cond="stims"):
 
     
 def sort_eeg(eeg, ids, min_trials):
+    """Sort EEG epochs by unique condition identifiers and limit trials per condition.
+
+    Parameters
+    ----------
+    eeg : ndarray
+        EEG epochs, shape (n_trials, n_channels, n_time).
+    ids : ndarray
+        Condition identifiers for each trial.
+    min_trials : int
+        Number of trials to retain for each unique condition.
+
+    Returns
+    -------
+    sorted_eeg : ndarray
+        EEG array shaped (n_conditions, min_trials, n_channels, n_time).
+    """
     tot_trials, channels, time = eeg.shape
     unique_ids = np.unique(ids)
     image_conditions = len(unique_ids)
-    print(unique_ids)
+
     sorted_eeg = np.full((image_conditions, min_trials, channels, time), np.nan)
     for uid_idx, uid in enumerate(unique_ids):
         uid_mask = np.isin(ids, uid)
