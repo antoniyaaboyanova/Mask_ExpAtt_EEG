@@ -1,1 +1,27 @@
 01_Eyelink_Task/EyeLinkDevKit_win32_v2.1.1197.exe
+# Python cache
+__pycache__/
+*.pyc
+
+# Packaging
+*.egg-info/
+build/
+dist/
+
+# Virtual environments
+venv/
+.venv/
+
+# executables
+*.exe
+
+# audio
+*.wav
+
+# specific python files
+01_Eyelik_Task_eyeResponse/EyelinkConnection.py
+01_Eyelik_Task_eyeResponse/EyelinkCoreGraphicsPsychoPy.py
+
+#specific folders
+**/data_ExpMask/
+**/eyelink_results/
