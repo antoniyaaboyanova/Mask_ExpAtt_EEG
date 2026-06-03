@@ -2,6 +2,8 @@ import numpy as np
 import random
 import os
 import pandas as pd 
+from collections import Counter
+
 from psychopy import visual, core, event, gui
 from eyelink_helpers import *
 from instructions import (
@@ -17,8 +19,8 @@ from instructions import (
 # =====================================================
 # Trial Functions
 # =====================================================
+
 def create_cue_dynam(highProb=0.7, lowProb=0.3, neutral=1.0, trials_per_cue=40, trial_per_neutral=32):
-    
     
     cue_data = {"cue_names": [".\\cues\\Sea_Animal.png",  ".\\cues\\Water_Vehicle.png",  ".\\cues\\Neutral.png"],
                 "cue_highProb_cats": [["dolphin", "whale"], ["speedboat", "submarine"], 
@@ -83,7 +85,7 @@ def assign_trigger(row, late=0.100):
     return mask_code + side_code + exp_code + image_code
 
 def create_changes(list_length, prec):
-    # Number of instances to set as True (2%)
+    # Number of instances to set as True
     num_true = int(list_length * prec)
 
     # Create lists of False values
@@ -96,6 +98,155 @@ def create_changes(list_length, prec):
         catch[idx] = True
     
     return np.array(catch)
+
+def allocate_catch_trials(N, p=0.3, k=3, alpha=0.66):
+    C = int(N * p)
+    
+    # ensure divisible by (k-1)*2 if needed
+    while C % (k-1) != 0:
+        C -= 1
+    
+    main = int(round(alpha * C))
+    
+    # enforce even split
+    remainder = C - main
+    other = remainder // (k - 1)
+    
+    # adjust if rounding broke divisibility
+    main = C - other * (k - 1)
+    other = [other] * (k - 1)
+    
+    return main, other[0], other[1]
+
+def assign_catch_trials(df, rng=None, p=0.25, k=3, alpha=0.5, cond="identity_catch"):
+    """
+    Takes your existing 224-trial dataframe and:
+      1. Flags 56 rows as catch trials (24 neutral, 14 expected, 14 unexpected),
+         balanced across mask_ISI within each expectation condition.
+      2. Reorders the sequence so catches are spaced min=2, max=7-8, mean~4 apart.
+    
+    Adds an cond boolean column.
+    Returns a reordered dataframe (reset index).
+    """
+    if rng is None:
+        rng = random.Random()
+
+    df = df.copy()
+    df[cond] = False
+
+    # --- 1. Flag catch trials ---
+    neut, exp, unexp = allocate_catch_trials(len(df), p, k, alpha)
+    catch_counts = {'neutral': neut, 'expected': exp, 'unexpected': unexp}
+
+    for condition, n_catches in catch_counts.items():
+        cond_idx = df[df['expectation'] == condition].index.tolist()
+        assert len(cond_idx) >= n_catches, \
+            f"Not enough {condition} trials: need {n_catches}, have {len(cond_idx)}"
+
+        # Balance across mask_ISI: half from 0.0165, half from 0.100
+        half = n_catches // 2  # both 52 and 14 are even, so no remainder
+
+        for isi_val, n in [(0.0165, half), (0.100, half)]:
+            isi_idx = df.loc[cond_idx][df.loc[cond_idx, 'mask_ISI'] == isi_val].index.tolist()
+            assert len(isi_idx) >= n, \
+                f"Not enough {condition}/ISI={isi_val} trials: need {n}, have {len(isi_idx)}"
+            chosen = rng.sample(isi_idx, n)
+            df.loc[chosen, cond] = True
+
+    # --- 2. Separate catches and non-catches ---
+    catch_df    = df[df[cond]].sample(frac=1, random_state=rng.randint(0, 99999)).reset_index(drop=True)
+    noncatch_df = df[~df[cond]].sample(frac=1, random_state=rng.randint(0, 99999)).reset_index(drop=True)
+
+    n_catches  = len(catch_df)    # 80
+    n_noncatch = len(noncatch_df) # 240
+
+    # --- 3. Sample inter-catch gaps ---
+    # gap = number of non-catch trials BEFORE each catch
+    # gap in [1, 7] → total catch-to-catch distance of [2, 8], mean ~4
+    gaps = _sample_gaps(
+        n_catches  = n_catches,
+        n_noncatch = n_noncatch,
+        gap_min    = 1,
+        gap_max    = 7,
+        gap_mean   = 3.0,  # 3 non-catches between → distance of 4
+        rng        = rng,
+    )
+
+    # --- 4. Interleave into final sequence ---
+    sequence_rows = []
+    nc_pointer = 0
+
+    for i, gap in enumerate(gaps):
+        # Insert `gap` non-catch trials
+        for _ in range(gap):
+            sequence_rows.append(noncatch_df.iloc[nc_pointer])
+            nc_pointer += 1
+        # Insert catch trial
+        sequence_rows.append(catch_df.iloc[i])
+
+    # Append any leftover non-catch trials at the end
+    while nc_pointer < n_noncatch:
+        sequence_rows.append(noncatch_df.iloc[nc_pointer])
+        nc_pointer += 1
+
+    result = pd.DataFrame(sequence_rows).reset_index(drop=True)
+    return result
+
+def _sample_gaps(n_catches, n_noncatch, gap_min, gap_max, gap_mean, rng):
+    """
+    Returns a list of n_catches integers in [gap_min, gap_max]
+    that sum exactly to n_noncatch, distributed around gap_mean.
+    """
+    # Sanity check: is the target sum achievable?
+    assert gap_min * n_catches <= n_noncatch <= gap_max * n_catches, (
+        f"Cannot distribute {n_noncatch} non-catch trials across {n_catches} gaps "
+        f"with min={gap_min}, max={gap_max}. "
+        f"Feasible range: [{gap_min * n_catches}, {gap_max * n_catches}]"
+    )
+
+    for _ in range(50_000):
+        gaps = [
+            max(gap_min, min(gap_max, round(rng.triangular(gap_min, gap_max, gap_mean))))
+            for _ in range(n_catches)
+        ]
+        diff = sum(gaps) - n_noncatch
+
+        # Nudge gaps up or down to hit the exact sum
+        for _ in range(5_000):
+            if diff == 0:
+                break
+            idx = rng.randrange(n_catches)
+            if diff > 0 and gaps[idx] > gap_min:
+                gaps[idx] -= 1
+                diff -= 1
+            elif diff < 0 and gaps[idx] < gap_max:
+                gaps[idx] += 1
+                diff += 1
+
+        if diff == 0:
+            return gaps
+
+    raise RuntimeError("Failed to converge on valid gap distribution.")
+
+def validate_sequence(df, catch_cond="identity_catch"):
+    catches = df[df[catch_cond]]
+
+    print(f"Total:     {len(df)}")
+    print(f"Catch {catch_cond}:     {len(catches)}  ({len(catches)/len(df)*100:.1f}%)")
+    print(f"Non-catch: {len(df) - len(catches)}")
+
+    print(f"\nCatch breakdown by expectation:")
+    for cond, grp in catches.groupby('expectation'):
+        c017 = (grp['mask_ISI'] == 0.0165).sum()
+        c100 = (grp['mask_ISI'] == 0.100).sum()
+        print(f"  {cond:11s}: total={len(grp)}  ISI=0.0165: {c017}  ISI=0.100: {c100}")
+
+    catch_pos = df.index[df[catch_cond]].tolist()
+    distances = [catch_pos[i+1] - catch_pos[i] for i in range(len(catch_pos) - 1)]
+
+    print(f"\nCatch-to-catch distances:")
+    print(f"  min={min(distances)}  max={max(distances)}  mean={np.mean(distances):.2f}")
+    print(f"  distribution: {dict(sorted(Counter(distances).items()))}")
 
 def build_constrained_order(df, rng=None, max_unexpected_run=1, max_attempts=1000):
     
@@ -150,7 +301,7 @@ def build_constrained_order(df, rng=None, max_unexpected_run=1, max_attempts=100
         "Consider relaxing the constraints."
     )
 
-def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1, identity_catch=1.0, location_catch=0.0):
+def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1, identity_catch=1.0, location_catch=0.0, k=3, alpha=0.5):
     rng = random.Random(random_seed)
     long_isi = 0.1
     categories = os.listdir(stim_path)
@@ -292,16 +443,23 @@ def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1, identity
     data["distractor_selection_loc"] = ["down" if x == "up" else "up" for x in data["target_selection_loc"]]
     data["distractor_loc"]           = ["R" if x == "L" else "L" for x in data["target_loc"]]
 
-    for key in data.keys():
-        print(f"{key} : {len(data[key])}")
 
     df = pd.DataFrame(data)
     df['image_index'] = df['target_id'].map(mapping)
     df['trigger']     = df.apply(assign_trigger, axis=1)
-    df["identity_catch"] = create_changes(len(df), identity_catch)
-    df["location_catch"] = create_changes(len(df), location_catch)
-
     df = build_constrained_order(df, rng=rng)
+
+    if identity_catch == 1.0 or identity_catch == 0.0:
+        df["identity_catch"] = create_changes(len(df), identity_catch)
+    else:
+        df = assign_catch_trials(df, rng=rng, p=identity_catch, k=k, alpha=alpha, cond="identity_catch")
+        validate_sequence(df, catch_cond="identity_catch")
+
+    if location_catch == 1.0 or location_catch == 0.0:
+        df["location_catch"] = create_changes(len(df), location_catch)
+    else:
+        df = assign_catch_trials(df, rng=rng, p=location_catch, k=k, alpha=alpha, cond="location_catch")
+        validate_sequence(df, catch_cond="location_catch")
 
     return df, stimuli
 
