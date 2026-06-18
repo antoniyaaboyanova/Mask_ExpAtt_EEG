@@ -233,7 +233,7 @@ def preprocess_eeg_cue(sub, tmin = -.2, tmax = 2.5, baseline = (-.2, 0), highpas
 
 
 #### DECODING ####
-def decode_general(sub, epoched_ver="cue", imgPerm=10, testsize=0.2, group_size=4, whitening=False):
+def decode_general(sub, epoched_ver="cue", imgPerm=10, testsize=0.2, group_size=4, whitening=False, TempGen=False, model='lda'):
     """
     Run temporal generalization decoding on EEG pseudotrials.
 
@@ -271,10 +271,16 @@ def decode_general(sub, epoched_ver="cue", imgPerm=10, testsize=0.2, group_size=
     """
 
     # ------------------------------------------------------------------
+    # Select classifier
+    # ------------------------------------------------------------------
+    if model == "lda":
+        CLASSIFIER = LinearDiscriminantAnalysis()
+    if model == "svm":
+        CLASSIFIER = LinearSVC(dual=True, penalty='l2', loss='hinge', C=1.0, max_iter=10000)
+
+    # ------------------------------------------------------------------
     # Load data
     # ------------------------------------------------------------------
-    all_events = get_main_events()
-
     if epoched_ver == "cue":
         subject_path = os.path.join(
             PATH,
@@ -300,7 +306,6 @@ def decode_general(sub, epoched_ver="cue", imgPerm=10, testsize=0.2, group_size=
     # Storage arrays
     # ------------------------------------------------------------------
     decAcc = np.full((n_conditions, n_conditions, n_time, n_time), np.nan)
-
     decAcc_e = np.full_like(decAcc, np.nan)
     decAcc_u = np.full_like(decAcc, np.nan)
 
@@ -312,56 +317,33 @@ def decode_general(sub, epoched_ver="cue", imgPerm=10, testsize=0.2, group_size=
     n, e, u = extract_expectations(eeg_, ids_)
 
     # ------------------------------------------------------------------
-    # Image permutation loop
+    # Image permutation loop (neutral)
     # ------------------------------------------------------------------
     for _ in tqdm(range(imgPerm), desc="Image permutations"):
 
         # Neutral pseudotrials
         pstrials, pk = pseudotrials_general(n)
 
-        # Match expected to unexpected trial counts
-        u_trials = u.shape[1]
-        e_trials = e.shape[1]
-
-        e_match = e[:, np.random.choice(
-            np.arange(e_trials),
-            size=u_trials,
-            replace=False
-        )]
-
-        # Expected/unexpected pseudotrials
-        pstrials_e, pk_e = pseudotrials_general(e_match)
-        pstrials_u, pk_u = pseudotrials_general(u)
 
         # --------------------------------------------------------------
         # Cross-validation params
         # --------------------------------------------------------------
         n_conditions, n_pstrials, n_sensors, n_time = pstrials.shape
-        _, n_pstrials_e, _, _ = pstrials_e.shape
-
         n_test = int(n_pstrials * testsize)
-        n_test_e = int(n_pstrials_e * testsize)
-
         cvs = int(n_pstrials / n_test)
-
         ps_ixs = np.arange(n_pstrials)
-        ps_ixs_e = np.arange(n_pstrials_e)
+    
 
         # --------------------------------------------------------------
         # Cross-validation loop
         # --------------------------------------------------------------
-        for cv in tqdm(range(cvs), desc="Cross-Validation", leave=False):
+        for cv in tqdm(range(cvs), desc="Cross-Validation"):
 
             test_ix = np.arange(n_test) + (cv * n_test)
-            test_ix_e = np.arange(n_test_e) + (cv * n_test_e)
-
             train_ix = np.delete(ps_ixs.copy(), test_ix)
 
             ps_train = pstrials[:, train_ix, :, :]
             ps_test = pstrials[:, test_ix, :, :]
-
-            ps_test_e = pstrials_e[:, test_ix_e, :, :]
-            ps_test_u = pstrials_u[:, test_ix_e, :, :]
 
             # ----------------------------------------------------------
             # Condition groups
@@ -375,18 +357,6 @@ def decode_general(sub, epoched_ver="cue", imgPerm=10, testsize=0.2, group_size=
                 # ------------------------------------------------------
                 if whitening:
 
-                    sigma_inv = estimate_sigma(ps_train[group])
-
-                    ps_test_e_w = apply_sigma(
-                        ps_test_e[group],
-                        sigma_inv
-                    )
-
-                    ps_test_u_w = apply_sigma(
-                        ps_test_u[group],
-                        sigma_inv
-                    )
-
                     ps_train_w, ps_test_w = mvnn(
                         ps_train[group],
                         ps_test[group],
@@ -399,9 +369,6 @@ def decode_general(sub, epoched_ver="cue", imgPerm=10, testsize=0.2, group_size=
 
                     ps_train_w = ps_train[group]
                     ps_test_w = ps_test[group]
-
-                    ps_test_e_w = ps_test_e[group]
-                    ps_test_u_w = ps_test_u[group]
 
                 # ------------------------------------------------------
                 # Pairwise decoding
@@ -438,51 +405,8 @@ def decode_general(sub, epoched_ver="cue", imgPerm=10, testsize=0.2, group_size=
                                 ps_test_w[cB % group_size]
                             ])
 
-                            test_x = np.reshape(
-                                test_x,
-                                (len(test_ix) * 2, n_sensors, n_time)
-                            )
-
-                            test_y = np.array(
-                                [1] * len(test_ix) +
-                                [2] * len(test_ix)
-                            )
-
-                            # ------------------------------
-                            # Expected test
-                            # ------------------------------
-                            expected_test_x = np.array([
-                                ps_test_e_w[cA % group_size],
-                                ps_test_e_w[cB % group_size]
-                            ])
-
-                            expected_test_x = np.reshape(
-                                expected_test_x,
-                                (len(test_ix_e) * 2, n_sensors, n_time)
-                            )
-
-                            expected_test_y = np.array(
-                                [1] * len(test_ix_e) +
-                                [2] * len(test_ix_e)
-                            )
-
-                            # ------------------------------
-                            # Unexpected test
-                            # ------------------------------
-                            unexpected_test_x = np.array([
-                                ps_test_u_w[cA % group_size],
-                                ps_test_u_w[cB % group_size]
-                            ])
-
-                            unexpected_test_x = np.reshape(
-                                unexpected_test_x,
-                                (len(test_ix_e) * 2, n_sensors, n_time)
-                            )
-
-                            unexpected_test_y = np.array(
-                                [1] * len(test_ix_e) +
-                                [2] * len(test_ix_e)
-                            )
+                            test_x = np.reshape(test_x, (len(test_ix) * 2, n_sensors, n_time))
+                            test_y = np.array([1] * len(test_ix) + [2] * len(test_ix))
 
                             # ------------------------------
                             # Train classifier
@@ -493,69 +417,151 @@ def decode_general(sub, epoched_ver="cue", imgPerm=10, testsize=0.2, group_size=
                             # ------------------------------
                             # Temporal generalization
                             # ------------------------------
-                            for tt in range(n_time):
-
+                            for tt in (range(n_time) if TempGen else [t]):
+                            
                                 # Neutral
-                                pred_y = classifier.predict(
-                                    test_x[:, :, tt]
-                                )
-
-                                acc_score = accuracy_score(
-                                    test_y,
-                                    pred_y
-                                )
+                                pred_y = classifier.predict(test_x[:, :, tt])
+                                acc_score = accuracy_score(test_y,pred_y)
 
                                 decAcc[cA, cB, t, tt] = np.nansum([
                                     decAcc[cA, cB, t, tt],
                                     acc_score
                                 ])
 
-                                # Expected
-                                pred_y = classifier.predict(
-                                    expected_test_x[:, :, tt]
-                                )
 
-                                acc_score = accuracy_score(
-                                    expected_test_y,
-                                    pred_y
-                                )
 
-                                decAcc_e[cA, cB, t, tt] = np.nansum([
-                                    decAcc_e[cA, cB, t, tt],
-                                    acc_score
-                                ])
+    # ------------------------------------------------------------------
+    # Image permutation loop 
+    # (train on full neutral, test on matched expected, unexpected)
+    # ------------------------------------------------------------------
 
-                                # Unexpected
-                                pred_y = classifier.predict(
-                                    unexpected_test_x[:, :, tt]
-                                )
+    for _ in tqdm(range(imgPerm), desc="Image permutations (exp)"):
+        # Neutral pseudotrials
+        ps_train, pk = pseudotrials_general(n)
+        train_ix = np.arange(ps_train.shape[1])
 
-                                acc_score = accuracy_score(
-                                    unexpected_test_y,
-                                    pred_y
-                                )
+        # Match expected to unexpected trial counts
+        u_trials = u.shape[1]
+        e_trials = e.shape[1]
 
-                                decAcc_u[cA, cB, t, tt] = np.nansum([
-                                    decAcc_u[cA, cB, t, tt],
-                                    acc_score
-                                ])
+        e_match = e[:, np.random.choice(
+            np.arange(e_trials),
+            size=u_trials,
+            replace=False
+        )]
+
+        # Expected/unexpected pseudotrials
+        ps_test_e, pk_e = pseudotrials_general(e_match)
+        ps_test_u, pk_u = pseudotrials_general(u)
+        test_ix_e = ps_test_e.shape[1]
+
+        # ----------------------------------------------------------
+        # Condition groups
+        # ----------------------------------------------------------
+        for start in range(0, n_conditions, group_size):
+
+            group = indexes[start:start + group_size]
+
+            # ------------------------------------------------------
+            # MVNN whitening
+            # ------------------------------------------------------
+            if whitening:
+
+                sigma_inv = estimate_sigma(ps_train[group])
+                ps_test_e_w = apply_sigma(ps_test_e[group], sigma_inv)
+                ps_test_u_w = apply_sigma(ps_test_u[group], sigma_inv)
+
+            else:
+
+                ps_train_w = ps_train[group]
+                ps_test_e_w = ps_test_e[group]
+                ps_test_u_w = ps_test_u[group]
+
+            # ------------------------------------------------------
+            # Pairwise decoding
+            # ------------------------------------------------------
+            for i, cA in enumerate(group):
+                for cB in group[i + 1:]:
+
+                    for t in range(n_time):
+
+                        # ------------------------------
+                        # Training data
+                        # ------------------------------
+                        train_x = np.array([
+                            ps_train_w[cA % group_size, :, :, t],
+                            ps_train_w[cB % group_size, :, :, t]
+                        ])
+
+                        train_x = np.reshape(train_x, (len(train_ix) * 2, n_sensors))
+                        train_y = np.array([1] * len(train_ix) + [2] * len(train_ix))
+
+                        # ------------------------------
+                        # Expected test
+                        # ------------------------------
+                        expected_test_x = np.array([
+                            ps_test_e_w[cA % group_size],
+                            ps_test_e_w[cB % group_size]
+                        ])
+
+                        expected_test_x = np.reshape(expected_test_x,
+                            (test_ix_e * 2, n_sensors, n_time))
+
+                        expected_test_y = np.array([1] * test_ix_e + [2] * test_ix_e)
+
+
+                        # ------------------------------
+                        # Unexpected test
+                        # ------------------------------
+                        unexpected_test_x = np.array([
+                            ps_test_u_w[cA % group_size],
+                            ps_test_u_w[cB % group_size]
+                        ])
+
+                        unexpected_test_x = np.reshape(unexpected_test_x,
+                            (test_ix_e * 2, n_sensors, n_time))
+
+                        unexpected_test_y = np.array([1] * test_ix_e + [2] * test_ix_e)
+
+                        # ------------------------------
+                        # Train classifier
+                        # ------------------------------
+                        classifier = CLASSIFIER
+                        classifier.fit(train_x, train_y)
+
+                        # ------------------------------
+                        # Temporal generalization
+                        # ------------------------------
+                        for tt in (range(n_time) if TempGen else [t]):
+                        
+                            # Expected
+                            pred_y = classifier.predict(expected_test_x[:, :, tt])
+                            acc_score = accuracy_score(expected_test_y, pred_y)
+
+                            decAcc_e[cA, cB, t, tt] = np.nansum([
+                                decAcc_e[cA, cB, t, tt],
+                                acc_score])
+
+                            # Unexpected
+                            pred_y = classifier.predict(unexpected_test_x[:, :, tt])
+                            acc_score = accuracy_score(unexpected_test_y, pred_y)
+
+                            decAcc_u[cA, cB, t, tt] = np.nansum([
+                                decAcc_u[cA, cB, t, tt],
+                                acc_score])
+
 
     # ------------------------------------------------------------------
     # Normalize
     # ------------------------------------------------------------------
     decAcc /= (cvs * imgPerm)
-    decAcc_e /= (cvs * imgPerm)
-    decAcc_u /= (cvs * imgPerm)
+    decAcc_e /= imgPerm
+    decAcc_u /= imgPerm
 
     # ------------------------------------------------------------------
     # Save outputs
     # ------------------------------------------------------------------
-    save_dir = os.path.join(
-        PATH,
-        "eeg_decoding",
-        epoched_ver
-    )
-
+    save_dir = os.path.join(PATH, "eeg_decoding", epoched_ver, model)
     os.makedirs(save_dir, exist_ok=True)
 
     np.save(os.path.join(save_dir, f"eeg_decoding_neutral_{sub:04d}.npy"), decAcc)
@@ -563,3 +569,366 @@ def decode_general(sub, epoched_ver="cue", imgPerm=10, testsize=0.2, group_size=
     np.save(os.path.join(save_dir, f"eeg_decoding_unexpected_{sub:04d}.npy"), decAcc_u)
 
     return decAcc, decAcc_e, decAcc_u
+
+def decode_neutral(sub, epoched_ver="cue", imgPerm=10, testsize=0.2, group_size=4, 
+                   whitening=False, TempGen=False, model='lda'):
+    """
+    Pairwise decoding on neutral pseudotrials with cross-validation.
+    Trains and tests on neutral trials only.
+
+    Returns
+    -------
+    decAcc : ndarray, shape (n_conditions, n_conditions, n_time, n_time)
+    """
+
+    # ------------------------------------------------------------------
+    # Select classifier
+    # ------------------------------------------------------------------
+    if model == "lda":
+        CLASSIFIER = LinearDiscriminantAnalysis()
+    if model == "svm":
+        CLASSIFIER = LinearSVC(dual=True, penalty='l2', loss='hinge', C=1.0, max_iter=10000)
+
+    # ------------------------------------------------------------------
+    # Load data
+    # ------------------------------------------------------------------
+    if epoched_ver == "cue":
+        subject_path = os.path.join(PATH, "eeg_epoched", f"eeg_MaskExp_{sub:04d}_cue_target.pickle")
+    else:
+        subject_path = os.path.join(PATH, "eeg_epoched", f"eeg_MaskExp_{sub:04d}.pickle")
+
+    subject_data = load_data(subject_path)
+    ids_ = subject_data["ids"]
+    eeg_ = subject_data["eeg"]
+
+    n_conditions = len(np.unique(ids_)) // 3
+    _, n_sensors, n_time = eeg_.shape
+
+    decAcc = np.full((n_conditions, n_conditions, n_time, n_time), np.nan)
+    indexes = np.arange(n_conditions)
+
+    n, e, u = extract_expectations(eeg_, ids_)
+
+    # ------------------------------------------------------------------
+    # Image permutation loop
+    # ------------------------------------------------------------------
+    for _ in tqdm(range(imgPerm), desc="Image permutations"):
+
+        pstrials, pk = pseudotrials_general(n)
+
+        n_conditions, n_pstrials, n_sensors, n_time = pstrials.shape
+        n_test = int(n_pstrials * testsize)
+        cvs = int(n_pstrials / n_test)
+        ps_ixs = np.arange(n_pstrials)
+
+        for cv in tqdm(range(cvs), desc="Cross-Validation"):
+
+            test_ix = np.arange(n_test) + (cv * n_test)
+            train_ix = np.delete(ps_ixs.copy(), test_ix)
+
+            ps_train = pstrials[:, train_ix, :, :]
+            ps_test  = pstrials[:, test_ix,  :, :]
+
+            for start in range(0, n_conditions, group_size):
+
+                group = indexes[start:start + group_size]
+
+                if whitening:
+                    ps_train_w, ps_test_w = mvnn(ps_train[group], ps_test[group], group_size, n_sensors, n_time)
+                else:
+                    ps_train_w = ps_train[group]
+                    ps_test_w  = ps_test[group]
+
+                for i, cA in enumerate(group):
+                    for cB in group[i + 1:]:
+                        for t in range(n_time):
+
+                            train_x = np.array([
+                                ps_train_w[cA % group_size, :, :, t],
+                                ps_train_w[cB % group_size, :, :, t]
+                            ])
+                            train_x = np.reshape(train_x, (len(train_ix) * 2, n_sensors))
+                            train_y = np.array([1] * len(train_ix) + [2] * len(train_ix))
+
+                            test_x = np.array([
+                                ps_test_w[cA % group_size],
+                                ps_test_w[cB % group_size]
+                            ])
+                            test_x = np.reshape(test_x, (len(test_ix) * 2, n_sensors, n_time))
+                            test_y = np.array([1] * len(test_ix) + [2] * len(test_ix))
+
+                            classifier = CLASSIFIER
+                            classifier.fit(train_x, train_y)
+
+                            for tt in (range(n_time) if TempGen else [t]):
+                                pred_y    = classifier.predict(test_x[:, :, tt])
+                                acc_score = accuracy_score(test_y, pred_y)
+                                decAcc[cA, cB, t, tt] = np.nansum([decAcc[cA, cB, t, tt], acc_score])
+
+    decAcc /= (cvs * imgPerm)
+
+    save_dir = os.path.join(PATH, "eeg_decoding", epoched_ver, model)
+    os.makedirs(save_dir, exist_ok=True)
+    np.save(os.path.join(save_dir, f"eeg_decoding_neutral_{sub:04d}.npy"), decAcc)
+
+    return decAcc
+
+
+def decode_exp_unexp(sub, epoched_ver="cue", imgPerm=10, group_size=4,
+                     whitening=False, TempGen=False, model='lda'):
+    """
+    Pairwise decoding with cross-condition generalization.
+    Trains on neutral pseudotrials, tests on expected and unexpected.
+
+    Returns
+    -------
+    decAcc_e : ndarray, shape (n_conditions, n_conditions, n_time, n_time)
+    decAcc_u : ndarray, shape (n_conditions, n_conditions, n_time, n_time)
+    """
+
+    # ------------------------------------------------------------------
+    # Select classifier
+    # ------------------------------------------------------------------
+    if model == "lda":
+        CLASSIFIER = LinearDiscriminantAnalysis()
+    if model == "svm":
+        CLASSIFIER = LinearSVC(dual=True, penalty='l2', loss='hinge', C=1.0, max_iter=10000)
+
+    # ------------------------------------------------------------------
+    # Load data
+    # ------------------------------------------------------------------
+    if epoched_ver == "cue":
+        subject_path = os.path.join(PATH, "eeg_epoched", f"eeg_MaskExp_{sub:04d}_cue_target.pickle")
+    else:
+        subject_path = os.path.join(PATH, "eeg_epoched", f"eeg_MaskExp_{sub:04d}.pickle")
+
+    subject_data = load_data(subject_path)
+    ids_ = subject_data["ids"]
+    eeg_ = subject_data["eeg"]
+
+    n_conditions = len(np.unique(ids_)) // 3
+    _, n_sensors, n_time = eeg_.shape
+
+    decAcc_e = np.full((n_conditions, n_conditions, n_time, n_time), np.nan)
+    decAcc_u = np.full_like(decAcc_e, np.nan)
+    indexes  = np.arange(n_conditions)
+
+    n, e, u = extract_expectations(eeg_, ids_)
+
+    # ------------------------------------------------------------------
+    # Image permutation loop
+    # ------------------------------------------------------------------
+    for _ in tqdm(range(imgPerm), desc="Image permutations (exp/unexp)"):
+
+        ps_train, pk = pseudotrials_general(n)
+        train_ix = np.arange(ps_train.shape[1])
+
+        # Match expected trial count to unexpected
+        u_trials = u.shape[1]
+        e_trials = e.shape[1]
+        e_match  = e[:, np.random.choice(np.arange(e_trials), size=u_trials, replace=False)]
+
+        ps_test_e, pk_e = pseudotrials_general(e_match)
+        ps_test_u, pk_u = pseudotrials_general(u)
+        test_ix_e = ps_test_e.shape[1]
+
+        for start in range(0, n_conditions, group_size):
+
+            group = indexes[start:start + group_size]
+
+            if whitening:
+                sigma_inv    = estimate_sigma(ps_train[group])
+                ps_test_e_w  = apply_sigma(ps_test_e[group], sigma_inv)
+                ps_test_u_w  = apply_sigma(ps_test_u[group], sigma_inv)
+            else:
+                ps_train_w  = ps_train[group]
+                ps_test_e_w = ps_test_e[group]
+                ps_test_u_w = ps_test_u[group]
+
+            for i, cA in enumerate(group):
+                for cB in group[i + 1:]:
+                    for t in range(n_time):
+
+                        train_x = np.array([
+                            ps_train_w[cA % group_size, :, :, t],
+                            ps_train_w[cB % group_size, :, :, t]
+                        ])
+                        train_x = np.reshape(train_x, (len(train_ix) * 2, n_sensors))
+                        train_y = np.array([1] * len(train_ix) + [2] * len(train_ix))
+
+                        expected_test_x = np.array([
+                            ps_test_e_w[cA % group_size],
+                            ps_test_e_w[cB % group_size]
+                        ])
+                        expected_test_x = np.reshape(expected_test_x, (test_ix_e * 2, n_sensors, n_time))
+                        expected_test_y = np.array([1] * test_ix_e + [2] * test_ix_e)
+
+                        unexpected_test_x = np.array([
+                            ps_test_u_w[cA % group_size],
+                            ps_test_u_w[cB % group_size]
+                        ])
+                        unexpected_test_x = np.reshape(unexpected_test_x, (test_ix_e * 2, n_sensors, n_time))
+                        unexpected_test_y = np.array([1] * test_ix_e + [2] * test_ix_e)
+
+                        classifier = CLASSIFIER
+                        classifier.fit(train_x, train_y)
+
+                        for tt in (range(n_time) if TempGen else [t]):
+
+                            pred_y    = classifier.predict(expected_test_x[:, :, tt])
+                            acc_score = accuracy_score(expected_test_y, pred_y)
+                            decAcc_e[cA, cB, t, tt] = np.nansum([decAcc_e[cA, cB, t, tt], acc_score])
+
+                            pred_y    = classifier.predict(unexpected_test_x[:, :, tt])
+                            acc_score = accuracy_score(unexpected_test_y, pred_y)
+                            decAcc_u[cA, cB, t, tt] = np.nansum([decAcc_u[cA, cB, t, tt], acc_score])
+
+    decAcc_e /= imgPerm
+    decAcc_u /= imgPerm
+
+    save_dir = os.path.join(PATH, "eeg_decoding", epoched_ver, model)
+    os.makedirs(save_dir, exist_ok=True)
+    np.save(os.path.join(save_dir, f"eeg_decoding_expected_{sub:04d}.npy"),   decAcc_e)
+    np.save(os.path.join(save_dir, f"eeg_decoding_unexpected_{sub:04d}.npy"), decAcc_u)
+
+    return decAcc_e, decAcc_u
+
+def decode_searchlight_exp_unexp(sub, epoched_ver="cue", imgPerm=10, group_size=4,
+                                  whitening=False, TempGen=False, model='lda'):
+    """
+    Searchlight decoding across electrodes.
+    Trains on all neutral pseudotrials, tests on matched expected and unexpected.
+
+    Returns
+    -------
+    search_e : ndarray, shape (n_conditions, n_conditions, n_sensors, n_time)
+    search_u : ndarray, shape (n_conditions, n_conditions, n_sensors, n_time)
+    """
+
+    # ------------------------------------------------------------------
+    # Select classifier
+    # ------------------------------------------------------------------
+    if model == "lda":
+        CLASSIFIER = LinearDiscriminantAnalysis()
+    elif model == "svm":
+        CLASSIFIER = LinearSVC(dual=True, penalty='l2', loss='hinge', C=1.0, max_iter=10000)
+
+    # ------------------------------------------------------------------
+    # Load data
+    # ------------------------------------------------------------------
+    if epoched_ver == "cue":
+        subject_path = os.path.join(PATH, "eeg_epoched", f"eeg_MaskExp_{sub:04d}_cue_target.pickle")
+    else:
+        subject_path = os.path.join(PATH, "eeg_epoched", f"eeg_MaskExp_{sub:04d}.pickle")
+
+    subject_data = load_data(subject_path)
+    ids_ = subject_data["ids"]
+    eeg_ = subject_data["eeg"]
+
+    n_conditions = len(np.unique(ids_)) // 3
+    _, n_sensors, n_time = eeg_.shape
+
+    search_e = np.full((n_conditions, n_conditions, n_sensors, n_time), np.nan)
+    search_u = np.full_like(search_e, np.nan)
+    indexes  = np.arange(n_conditions)
+
+    n, e, u = extract_expectations(eeg_, ids_)
+
+    # ------------------------------------------------------------------
+    # Image permutation loop
+    # ------------------------------------------------------------------
+    for _ in tqdm(range(imgPerm), desc="Image permutations (searchlight)"):
+
+        # Train on all neutral pseudotrials
+        ps_train, _ = pseudotrials_general(n)
+        train_ix     = np.arange(ps_train.shape[1])
+
+        # Match expected trial count to unexpected, then form pseudotrials
+        u_trials = u.shape[1]
+        e_trials = e.shape[1]
+        e_match  = e[:, np.random.choice(np.arange(e_trials), size=u_trials, replace=False)]
+
+        ps_test_e, _ = pseudotrials_general(e_match)
+        ps_test_u, _ = pseudotrials_general(u)
+        test_ix_e     = ps_test_e.shape[1]
+
+        # ------------------------------------------------------------------
+        # Condition groups
+        # ------------------------------------------------------------------
+        for start in range(0, n_conditions, group_size):
+
+            group = indexes[start:start + group_size]
+
+            if whitening:
+                sigma_inv   = estimate_sigma(ps_train[group])
+                ps_train_w  = ps_train[group]
+                ps_test_e_w = apply_sigma(ps_test_e[group], sigma_inv)
+                ps_test_u_w = apply_sigma(ps_test_u[group], sigma_inv)
+            else:
+                ps_train_w  = ps_train[group]
+                ps_test_e_w = ps_test_e[group]
+                ps_test_u_w = ps_test_u[group]
+
+            # ------------------------------------------------------------------
+            # Pairwise loop
+            # ------------------------------------------------------------------
+            for i, cA in enumerate(group):
+                for cB in group[i + 1:]:
+                    for sen_id in range(n_sensors):
+                        for t in range(n_time):
+
+                            # Train: single electrode, single timepoint
+                            train_x = np.array([
+                                ps_train_w[cA % group_size, :, sen_id, t],
+                                ps_train_w[cB % group_size, :, sen_id, t]
+                            ])
+                            train_x = np.reshape(train_x, (len(train_ix) * 2, 1))
+                            train_y = np.array([1] * len(train_ix) + [2] * len(train_ix))
+
+                            # Expected test: single electrode, all timepoints
+                            exp_test_x = np.array([
+                                ps_test_e_w[cA % group_size, :, sen_id, :],
+                                ps_test_e_w[cB % group_size, :, sen_id, :]
+                            ])
+                            exp_test_x = np.reshape(exp_test_x, (test_ix_e * 2, 1, n_time))
+                            exp_test_y = np.array([1] * test_ix_e + [2] * test_ix_e)
+
+                            # Unexpected test: single electrode, all timepoints
+                            unexp_test_x = np.array([
+                                ps_test_u_w[cA % group_size, :, sen_id, :],
+                                ps_test_u_w[cB % group_size, :, sen_id, :]
+                            ])
+                            unexp_test_x = np.reshape(unexp_test_x, (test_ix_e * 2, 1, n_time))
+                            unexp_test_y = np.array([1] * test_ix_e + [2] * test_ix_e)
+
+                            classifier = CLASSIFIER
+                            classifier.fit(train_x, train_y)
+
+                            for tt in (range(n_time) if TempGen else [t]):
+
+                                # Expected
+                                pred_y    = classifier.predict(exp_test_x[:, :, tt])
+                                acc_score = accuracy_score(exp_test_y, pred_y)
+                                search_e[cA, cB, sen_id, t] = np.nansum([
+                                    search_e[cA, cB, sen_id, t], acc_score
+                                ])
+
+                                # Unexpected
+                                pred_y    = classifier.predict(unexp_test_x[:, :, tt])
+                                acc_score = accuracy_score(unexp_test_y, pred_y)
+                                search_u[cA, cB, sen_id, t] = np.nansum([
+                                    search_u[cA, cB, sen_id, t], acc_score
+                                ])
+
+    # ------------------------------------------------------------------
+    # Normalize and save
+    # ------------------------------------------------------------------
+    search_e /= imgPerm
+    search_u /= imgPerm
+
+    save_dir = os.path.join(PATH, "eeg_decoding", epoched_ver, model)
+    os.makedirs(save_dir, exist_ok=True)
+    np.save(os.path.join(save_dir, f"eeg_searchlight_expected_{sub:04d}.npy"),   search_e)
+    np.save(os.path.join(save_dir, f"eeg_searchlight_unexpected_{sub:04d}.npy"), search_u)
+
+    return search_e, search_u
