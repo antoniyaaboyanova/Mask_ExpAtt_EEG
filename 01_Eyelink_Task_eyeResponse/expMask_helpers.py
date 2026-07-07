@@ -16,7 +16,7 @@ from instructions import (
     PRACTICE_TEXT
 )
 
-# =====================================================
+#=====================================================
 # Trial Functions
 # =====================================================
 
@@ -301,6 +301,44 @@ def build_constrained_order(df, rng=None, max_unexpected_run=1, max_attempts=100
         "Consider relaxing the constraints."
     )
 
+def get_second_selection(row):
+    group1 = {0, 1, 14, 15}
+    group2 = {6, 7, 10, 11}
+    if row["target_id"] in group1 and row["distractor_selection_match_id"] in group1:
+        pair = [(6, 7), (10, 11)][np.random.randint(2)]
+    elif row["target_id"] in group2 and row["distractor_selection_match_id"] in group2:
+        pair = [(0, 1), (14, 15)][np.random.randint(2)]
+    else:
+        pair = (np.nan, np.nan)
+    return pair
+
+def assign_locations(row):
+    # randomly choose target location
+    target_loc = np.random.choice(["up", "down", "left", "right"])
+
+    match_map = {
+        "up": "left",
+        "left": "up",
+        "down": "right",
+        "right": "down",
+    }
+
+    distractor_match_loc = match_map[target_loc]
+
+    remaining = list(
+        {"up", "down", "left", "right"}
+        - {target_loc, distractor_match_loc}
+    )
+
+    np.random.shuffle(remaining)
+
+    return pd.Series({
+        "target_selection_loc": target_loc,
+        "distractor_match_selection_loc": distractor_match_loc,
+        "distractor_2_selection_loc": remaining[0],
+        "distractor_2_match_selection_loc": remaining[1],
+    })
+
 def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1, identity_catch=1.0, location_catch=0.0, k=3, alpha=0.5):
     rng = random.Random(random_seed)
     long_isi = 0.1
@@ -317,12 +355,10 @@ def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1, identity
     data = {
         "target_id": [],
         "distractor_id": [],
-        "distractor_selection_id": [],
+        "distractor_selection_match_id": [],
         "target": [],
         "distractor": [],
-        "distractor_selection": [],
-        "distractor_selection_loc": [],
-        "target_selection_loc": [],
+        "distractor_selection_match": [],
         "expectation": [],
         "mask_ISI": [],
         "cue": [],
@@ -378,6 +414,7 @@ def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1, identity
         for i, r in enumerate(repeats):
             trial_target_ids.extend([target_ids[i]] * r)
             trial_targets.extend([targets[i]] * r)
+            
             # paired distractor-selection is the "other" image (flipped)
             paired_idx = (i + 1) % n_targets
             trial_dist_sel_ids.extend([target_ids[paired_idx]] * r)
@@ -392,8 +429,10 @@ def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1, identity
 
         data["target_id"].extend(trial_target_ids)
         data["target"].extend(trial_targets)
-        data["distractor_selection_id"].extend(trial_dist_sel_ids)
-        data["distractor_selection"].extend(trial_dist_sels)
+        
+        data["distractor_selection_match_id"].extend(trial_dist_sel_ids)
+        data["distractor_selection_match"].extend(trial_dist_sels)
+        
         data["target_loc"].extend(locs)
         data["target_name"].extend(trial_names)
         data["target_cat"].extend(trial_cats)
@@ -437,17 +476,33 @@ def create_block_trials(stim_path, cue_data, random_seed, long_isi=0.1, identity
                 add_trials(targets, target_ids, n_trials, mask, cue, expectation_label)
 
     # ---- Derived columns (computed after all rows are collected) ----
-    n_total = len(data["target"])
-
-    data["target_selection_loc"]    = [np.random.choice(["up", "down"], p=[0.5, 0.5]) for _ in range(n_total)]
-    data["distractor_selection_loc"] = ["down" if x == "up" else "up" for x in data["target_selection_loc"]]
-    data["distractor_loc"]           = ["R" if x == "L" else "L" for x in data["target_loc"]]
-
-
+    data["distractor_loc"] = ["R" if x == "L" else "L" for x in data["target_loc"]]
     df = pd.DataFrame(data)
     df['image_index'] = df['target_id'].map(mapping)
     df['trigger']     = df.apply(assign_trigger, axis=1)
     df = build_constrained_order(df, rng=rng)
+
+    df[
+    ["distractor_selection_2_id", "distractor_selection_2_match_id"]
+    ] = df.apply(get_second_selection, axis=1, result_type="expand")
+
+    df["distractor_selection_2"] = (
+        df["distractor_selection_2_id"]
+        .map(lambda x: stimuli[int(x)].split("\\")[-1] if not pd.isna(x) else np.nan)
+    )
+
+    df["distractor_selection_2_match"] = (
+        df["distractor_selection_2_match_id"]
+        .map(lambda x: stimuli[int(x)].split("\\")[-1] if not pd.isna(x) else np.nan)
+    )
+
+
+    df[[
+            "target_selection_loc",
+            "distractor_match_selection_loc",
+            "distractor_2_selection_loc",
+            "distractor_2_match_selection_loc",
+        ]] = df.apply(assign_locations, axis=1)
 
     if identity_catch == 1.0 or identity_catch == 0.0:
         df["identity_catch"] = create_changes(len(df), identity_catch)
@@ -541,7 +596,7 @@ def run_block(win,
     gaze_response=True,
     eye_used=1,
     ppd=40,
-    fix_window_deg=3.0):
+    fix_window_deg=4.0):
 
     # =====================================================
     # TEXT CREATION
@@ -581,6 +636,27 @@ def run_block(win,
     pos_right_selection = ( ecc, 0)
     pos_up_selection    = (0,  ecc)
     pos_down_selection  = (0, -ecc)
+    
+    # Small center dots
+    dot_radius = 4  # pixels
+
+    dot_left = visual.Circle(
+        win,
+        radius=dot_radius,
+        pos=pos_left,      # same center as left rectangle
+        fillColor='black',
+        lineColor='black',
+        units='pix'
+    )
+
+    dot_right = visual.Circle(
+        win,
+        radius=dot_radius,
+        pos=pos_right,     # same center as right rectangle
+        fillColor='black',
+        lineColor='black',
+        units='pix'
+    )
 
     # =====================================================
     # INTRODUCTION
@@ -603,6 +679,15 @@ def run_block(win,
 
     left_el  = (cx + pos_left[0],  cy - pos_left[1])
     right_el = (cx + pos_right[0], cy - pos_right[1])
+
+    # ── pre-compute positions for 4afc ─────────              
+    radius = 250
+
+    loc_to_pos = {
+        "right": ( radius, 0),
+        "up":    (0,  radius),
+        "left":  (-radius, 0),
+        "down":  (0, -radius)}
 
     # ── before trial loop ────────────────────────────────────────────────────────
     if el_tracker is not None:
@@ -633,7 +718,9 @@ def run_block(win,
                     f"Please take a short break (1–2 minutes).\n\n"
                     f"Location: {acc_loc:.1f}%\n\n"
                     f"Identity: {acc_id:.1f}%\n\n"
-                    "Press SPACE to continue ⌨"
+                    "First, Press SPACE to continue ⌨\n\n"
+                    "Then look in the centre and press ENTER"
+                    
                 ),
                 height=32, color=[-1, -1, -1], wrapWidth=856)
 
@@ -652,7 +739,6 @@ def run_block(win,
         # =====================================================
         # CUE PERIOD
         # =====================================================
-        fixation_offset = 0.3  # seconds before postcue_fix ends that fixation disappears
         
         # Select masks here to avoid potential lag
         trial_masks_left  = np.random.choice(mask_pool, n_masks_per_trial, replace=False)
@@ -680,11 +766,7 @@ def run_block(win,
         # Fixation visible for first portion of postcue period
         fixation_cross.draw()
         win.flip()
-        core.wait(postcue_fix - fixation_offset)
-
-        # Blank screen for final portion (anticipatory period)
-        win.flip()
-        core.wait(fixation_offset)
+        core.wait(postcue_fix)
 
         # =====================================================
         # IMAGE + MASK PERIOD
@@ -772,6 +854,10 @@ def run_block(win,
 
             event.clearEvents(eventType='keyboard')
             fixation_arrows.draw()
+            resp_rect_left.draw()
+            resp_rect_right.draw()
+            dot_left.draw()
+            dot_right.draw()
             t_resp_onset  = win.flip()
             response_clock = core.Clock()
 
@@ -804,12 +890,6 @@ def run_block(win,
                     if response_loc is not None:
                         win.flip(); break
 
-                    fixation_arrows.draw()
-                    resp_rect_left.draw()
-                    resp_rect_right.draw()
-                    win.flip()
-
-
             # ── keyboard response ─────────────────────────────────────────────
             else:
                 while response_loc is None and response_clock.getTime() < loc_response:
@@ -823,9 +903,10 @@ def run_block(win,
                             break
                     if response_loc is not None:
                         win.flip(); break
-                    fixation_arrows.draw()
                     resp_rect_left.draw()
                     resp_rect_right.draw()
+                    dot_left.draw()
+                    dot_right.draw()
                     win.flip()
 
             correct_loc = response_loc == image_data["target_loc"][i] if response_loc else False
@@ -835,37 +916,49 @@ def run_block(win,
 
         # ------ IDENTITY catch ------
         if image_data["identity_catch"][i]:
-
-            preresp_fix = 0.150
             fixation_cross.draw()
             win.flip()
             core.wait(preresp_fix)
+
             if el_tracker is not None:
                 el_tracker.sendMessage("ID_ONSET")
 
-            distractor_selection_id = image_data["distractor_selection_id"][i]
-            target     = image_data['only_targets'][target_id]
-            distractor = image_data['only_targets'][distractor_selection_id]
+            # stimuli
+            target = image_data['only_targets'][target_id]
 
-            target.pos     = pos_up_selection   if image_data["target_selection_loc"][i] == "up"   else pos_down_selection
-            distractor.pos = pos_down_selection if image_data["target_selection_loc"][i] == "up"   else pos_up_selection
+            distractor_match = image_data['only_targets'][int(image_data["distractor_selection_match_id"][i])]
+            distractor_2 = image_data['only_targets'][int(image_data["distractor_selection_2_id"][i])]
+            distractor_2_match = image_data['only_targets'][int(image_data["distractor_selection_2_match_id"][i])]
+            
+            # positions
+            target.pos = loc_to_pos[image_data["target_selection_loc"][i]]
 
+            distractor_match.pos = loc_to_pos[image_data["distractor_match_selection_loc"][i]]
+            distractor_2.pos = loc_to_pos[image_data["distractor_2_selection_loc"][i]]
+            distractor_2_match.pos = loc_to_pos[image_data["distractor_2_match_selection_loc"][i]]
+
+            # sum-up
+            response_stimuli = [target, distractor_match,distractor_2, distractor_2_match]
+            
+            # response mapping
             key_to_stim = {
-                "up":   target     if image_data["target_selection_loc"][i] == "up"   else distractor,
-                "down": target     if image_data["target_selection_loc"][i] == "down" else distractor,
-            }
-
+                image_data["target_selection_loc"][i]: target,
+                image_data["distractor_match_selection_loc"][i]: distractor_match,
+                image_data["distractor_2_selection_loc"][i]: distractor_2,
+                image_data["distractor_2_match_selection_loc"][i]: distractor_2_match}
+            
+            # draw stimuli and prep for keyboard response 
             event.clearEvents(eventType='keyboard')
-            target.draw()
-            distractor.draw()
-            t_resp_onset  = win.flip()
+            for stim in response_stimuli:
+                stim.draw()
+
+            t_resp_onset = win.flip()
             response_clock = core.Clock()
 
-
             # ── keyboard response ─────────────────────────────────────────────
-            
             while response_id is None and response_clock.getTime() < id_response:
-                keys = event.getKeys(keyList=["up", "down", "escape"], timeStamped=response_clock)
+                keys = event.getKeys(keyList=["up", "down", "left", "right", "escape"], 
+                                     timeStamped=response_clock)
                 for key, t in keys:
                     if key == "escape":
                         win.close(); core.quit()
@@ -875,8 +968,9 @@ def run_block(win,
                         break
                 if response_id is not None:
                     win.flip(); break
-                target.draw()
-                distractor.draw()
+                
+                for stim in response_stimuli:
+                    stim.draw()
                 win.flip()
 
             correct_id = response_id == image_data["target"][i] if response_id else False
@@ -963,7 +1057,7 @@ def run_block(win,
     label = "Practice complete!" if practice else f"Block {run_num + 1} complete!"
     summary_text = visual.TextStim(
         win,
-        text=f"{label}\n\nLocation: {acc_loc:.1f}%\n\Identity: {acc_id:.1f}%\n\nDo NOT press any button!\n\nThe experimenter will be with you soon.",
+        text=f"{label}\n\nLocation: {acc_loc:.1f}%\n\nIdentity: {acc_id:.1f}%\n\nDo NOT press any button!\n\nThe experimenter will be with you soon.",
         height=40, color=[-1, -1, -1], wrapWidth=856)
     draw_and_wait(win, lambda: summary_text.draw())
     return trial_log

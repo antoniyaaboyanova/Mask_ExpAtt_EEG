@@ -20,7 +20,7 @@ precue_fix     = (1.0, 1.2)
 postcue_fix    = 0.5
 image_duration = 0.0165
 mask_duration = 0.0165
-id_response    = 2
+id_response    = 2.5
 loc_response   = 2
 preresp_fix    = 0.1
 postresp_fix   = 0.5
@@ -180,7 +180,7 @@ resp_rect_left = visual.Rect(
     win,
     width=image_size, height=image_size,
     pos=pos_left,
-    lineColor='white',
+    lineColor='black',
     fillColor=None,
     lineWidth=3,
     units='pix')
@@ -189,7 +189,7 @@ resp_rect_right = visual.Rect(
     win,
     width=image_size, height=image_size,
     pos=pos_right,
-    lineColor='white',
+    lineColor='black',
     fillColor=None,
     lineWidth=3,
     units='pix')

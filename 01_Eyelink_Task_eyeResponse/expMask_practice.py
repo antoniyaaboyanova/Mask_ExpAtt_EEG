@@ -149,7 +149,7 @@ if task_type == "loc":
     identity_catch_prob = 0.0
     location_catch_prob = 1.0
 if task_type == "mix":
-    identity_catch_prob = 0.2
+    identity_catch_prob = 0.4
     location_catch_prob = 1.0
     
 image_data, stimuli = create_block_trials(
